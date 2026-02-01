@@ -1,0 +1,8 @@
+{
+  "name": "Copy of Sentient KVM - Mobile Agent",
+  "description": "Android-optimized AI agent that uses the phone's camera to analyze screens and generate Ducky Script payloads for HID injection.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
