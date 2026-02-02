@@ -17,4 +17,10 @@ export default defineConfig({
       '@': path.resolve(__dirname, '.'),
     },
   },
+  build: {
+    // Keep the importmap for TF.js (too large to bundle, loaded from CDN)
+    rollupOptions: {
+      external: ['@tensorflow/tfjs'],
+    },
+  },
 });
