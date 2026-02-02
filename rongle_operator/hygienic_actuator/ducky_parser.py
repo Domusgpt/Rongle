@@ -176,6 +176,9 @@ class DuckyScriptParser:
     _RE_STRINGLN = re.compile(r"^STRINGLN\s(.+)$", re.IGNORECASE)
     _RE_REPEAT = re.compile(r"^REPEAT\s+(\d+)$", re.IGNORECASE)
     _RE_REM = re.compile(r"^REM\s", re.IGNORECASE)
+    # Reactive commands
+    _RE_WAIT_FOR_IMAGE = re.compile(r"^WAIT_FOR_IMAGE\s+(.+)$", re.IGNORECASE)
+    _RE_ASSERT_VISIBLE = re.compile(r"^ASSERT_VISIBLE\s+(.+)$", re.IGNORECASE)
 
     def __init__(
         self,
@@ -251,6 +254,16 @@ class DuckyScriptParser:
     # Internal line parser
     # ------------------------------------------------------------------
     def _parse_line(self, line: str) -> ParsedCommand | None:
+        # WAIT_FOR_IMAGE
+        m = self._RE_WAIT_FOR_IMAGE.match(line)
+        if m:
+            return ParsedCommand(kind="wait_for_image", string_chars=m.group(1), raw_line=line)
+
+        # ASSERT_VISIBLE
+        m = self._RE_ASSERT_VISIBLE.match(line)
+        if m:
+            return ParsedCommand(kind="assert_visible", string_chars=m.group(1), raw_line=line)
+
         # DELAY
         m = self._RE_DELAY.match(line)
         if m:

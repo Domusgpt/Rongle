@@ -32,7 +32,7 @@ from pathlib import Path
 from .config.settings import Settings
 from .hygienic_actuator import DuckyScriptParser, EmergencyStop, HIDGadget, Humanizer
 from .immutable_ledger import AuditLogger
-from .policy_engine import PolicyGuardian
+from .policy_engine import PolicyGuardian, PolicyVerdict
 from .visual_cortex import FrameGrabber, ReflexTracker, VLMReasoner
 from .visual_cortex.vlm_reasoner import GeminiBackend, LocalVLMBackend
 
@@ -258,7 +258,24 @@ def agent_loop(
 
         # Build Ducky Script to click the target element center
         target_cx, target_cy = element.center
-        ducky_script = f"MOUSE_MOVE {target_cx} {target_cy}\nMOUSE_CLICK LEFT"
+
+        # Try Visual Servoing for the move
+        from .hygienic_actuator.servoing import visual_servo_move
+
+        # We only servo if we are doing a click (which implies a move first).
+        # We split the generation: Move first, then Click.
+
+        servo_success = visual_servo_move(
+            target_cx, target_cy,
+            grabber, tracker, hid, parser
+        )
+
+        if servo_success:
+             ducky_script = "MOUSE_CLICK LEFT"
+             audit.log("SERVO", action_detail=f"Visual Servoing converged to ({target_cx}, {target_cy})")
+        else:
+             # Fallback to standard open-loop script
+             ducky_script = f"MOUSE_MOVE {target_cx} {target_cy}\nMOUSE_CLICK LEFT"
 
         audit.log(
             "PLAN",
@@ -277,6 +294,30 @@ def agent_loop(
 
             # Policy check
             verdict = guardian.check_command(cmd.raw_line, cursor_x, cursor_y)
+
+            # Semantic Check (Experimental Local VLM Guard)
+            # If enabled in policy, we ask the local VLM if the command seems safe given the screen context.
+            if verdict.allowed and guardian._config.semantic_safety_check and cmd.kind in ("string", "mouse_click"):
+                # We reuse 'reasoner' which might be remote or local. Ideally this should force local.
+                # For now, we perform a heuristic check.
+
+                safety_prompt = f"Is the action '{cmd.raw_line}' safe to perform on this screen? Answer YES or NO."
+                try:
+                    # Note: Ideally this uses a dedicated local backend to avoid API costs/latency
+                    safety_resp = reasoner.backend.query(frame.image, safety_prompt)
+
+                    # Check for explicit "NO" in the response description
+                    # VLM responses can be verbose, so we look for 'NO' appearing clearly.
+                    response_upper = safety_resp.description.upper().strip()
+
+                    if response_upper.startswith("NO") or " UNSAFE " in response_upper:
+                        logger.warning(f"Semantic Guard blocked: {cmd.raw_line} -> {response_upper}")
+                        verdict = PolicyVerdict(allowed=False, reason=f"Semantic Safety Violation: {response_upper[:50]}...", rule_name="semantic_guard")
+                except Exception as e:
+                    logger.error(f"Semantic Guard failed to query VLM: {e}")
+                    # Fail open or closed? Failing open for now to prevent lockout on VLM error
+                    pass
+
             audit.log(
                 "POLICY_CHECK",
                 action_detail=f"Command: {cmd.raw_line!r} → {verdict.allowed}",
@@ -292,13 +333,46 @@ def agent_loop(
                 )
                 continue
 
-            # Execute via HID
-            hid.execute(cmd)
-            audit.log(
-                "EXECUTE",
-                action_detail=f"Executed: {cmd.raw_line}",
-                policy_verdict="allowed",
-            )
+            # Execute Reactive Commands or Standard HID
+            if cmd.kind == "wait_for_image" or cmd.kind == "assert_visible":
+                # Logic: check if the description in cmd.string_chars is visible now.
+                # This requires a VLM call (expensive) or a fast detector.
+                # For this implementation, we reuse the VLM reasoner.
+
+                check_frame = grabber.grab()
+                found = reasoner.find_element(check_frame.image, cmd.string_chars)
+
+                if cmd.kind == "wait_for_image":
+                    wait_attempts = 5
+                    while not found and wait_attempts > 0:
+                        logger.info(f"Waiting for '{cmd.string_chars}'...")
+                        time.sleep(1.0)
+                        check_frame = grabber.grab()
+                        found = reasoner.find_element(check_frame.image, cmd.string_chars)
+                        wait_attempts -= 1
+
+                    if not found:
+                         logger.warning(f"WAIT_FOR_IMAGE timed out: {cmd.string_chars}")
+                         # Continue? Or abort? Standard Ducky Script usually aborts on failure?
+                         # We'll continue but log it.
+
+                elif cmd.kind == "assert_visible":
+                    if not found:
+                        logger.error(f"ASSERT_VISIBLE failed: {cmd.string_chars}")
+                        audit.log("ASSERT_FAIL", action_detail=f"Element '{cmd.string_chars}' not found")
+                        # Break execution of this script
+                        break
+                    else:
+                        logger.info(f"ASSERT_VISIBLE passed: {cmd.string_chars}")
+
+            else:
+                # Standard HID command
+                hid.execute(cmd)
+                audit.log(
+                    "EXECUTE",
+                    action_detail=f"Executed: {cmd.raw_line}",
+                    policy_verdict="allowed",
+                )
 
         previous_action = f"Clicked '{element.label}' at ({target_cx}, {target_cy})"
 

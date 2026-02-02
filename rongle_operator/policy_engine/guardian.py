@@ -72,6 +72,7 @@ class PolicyConfig:
     blocked_key_combos: list[str] = field(default_factory=list)
     time_window: TimeWindowRule | None = None
     blocked_sequences: list[list[str]] = field(default_factory=list)
+    semantic_safety_check: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +143,7 @@ class PolicyGuardian:
             blocked_key_combos=raw.get("blocked_key_combos", []),
             time_window=time_window,
             blocked_sequences=raw.get("blocked_sequences", []),
+            semantic_safety_check=raw.get("semantic_safety_check", False),
         )
 
         # Determine max sequence length to keep relevant history size

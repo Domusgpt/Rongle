@@ -134,9 +134,12 @@ class AuditLogger:
         """
         Compute the Merkle chain hash for an entry.
 
-        ``hash_N = SHA256(timestamp || action || screenshot_hash || hash_{N-1})``
+        Formula: hash_N = SHA256( timestamp || action || screenshot_hash || hash_{N-1} )
+        The separator used is strictly "||" to avoid collision with content.
         """
-        preimage = f"{timestamp:.6f}|{action}|{screenshot_hash}|{previous_hash}"
+        # Ensure timestamp has sufficient precision string representation
+        ts_str = f"{timestamp:.6f}"
+        preimage = f"{ts_str}||{action}||{screenshot_hash}||{previous_hash}"
         return hashlib.sha256(preimage.encode("utf-8")).hexdigest()
 
     # ------------------------------------------------------------------
