@@ -36,7 +36,7 @@ from .policy_engine import PolicyGuardian
 from .visual_cortex import FrameGrabber, ReflexTracker, VLMReasoner
 from .visual_cortex.vlm_reasoner import GeminiBackend, LocalVLMBackend
 
-logger = logging.getLogger("operator")
+logger = logging.getLogger("rng_operator")
 
 
 # ---------------------------------------------------------------------------
@@ -338,7 +338,7 @@ def agent_loop(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hardware-Isolated Agentic Operator")
     parser.add_argument("--goal", type=str, default="", help="Agent goal (interactive if empty)")
-    parser.add_argument("--config", type=str, default="operator/config/settings.json",
+    parser.add_argument("--config", type=str, default="rng_operator/config/settings.json",
                         help="Path to settings JSON")
     parser.add_argument("--dry-run", action="store_true", help="No actual HID output")
     parser.add_argument("--software-estop", action="store_true",

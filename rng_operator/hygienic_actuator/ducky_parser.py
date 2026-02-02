@@ -208,11 +208,12 @@ class DuckyScriptParser:
 
             # REPEAT — duplicate last command N times
             m = self._RE_REPEAT.match(line)
-            if m and commands:
-                count = int(m.group(1))
-                last = commands[-1]
-                for _ in range(count):
-                    commands.append(last)
+            if m:
+                if commands:
+                    count = int(m.group(1))
+                    last = commands[-1]
+                    for _ in range(count):
+                        commands.append(last)
                 continue
 
             cmd = self._parse_line(line)

@@ -171,9 +171,10 @@ class AuditLogger:
         AuditEntry
             The newly created log entry.
         """
+        screenshot_hash = screenshot_hash or ("0" * 64)
         with self._lock:
             self._sequence += 1
-            ts = time.time()
+            ts = round(time.time(), 6)
 
             entry_hash = self.compute_hash(
                 ts, action, screenshot_hash, self._last_hash
@@ -187,7 +188,7 @@ class AuditLogger:
                 ) + f".{int((ts % 1) * 1000):03d}Z",
                 action=action,
                 action_detail=action_detail,
-                screenshot_hash=screenshot_hash or ("0" * 64),
+                screenshot_hash=screenshot_hash,
                 previous_hash=self._last_hash,
                 entry_hash=entry_hash,
                 policy_verdict=policy_verdict,
