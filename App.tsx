@@ -16,7 +16,7 @@ import {
   Annotation,
   HIDMode,
 } from './types';
-import { analyzeScreenFrame } from './services/gemini';
+import { analyzeScreenFrame, hasGeminiApiKey, setGeminiApiKey, clearGeminiApiKey } from './services/gemini';
 import { portalAPI } from './services/portal-api';
 import { generateAnnotationPrompt } from './services/canvas-annotator';
 import { HIDBridge } from './services/hid-bridge';
@@ -42,6 +42,7 @@ import {
   Layers,
   Cpu,
   Eye,
+  KeyRound,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -96,6 +97,10 @@ export default function App() {
   const [cnnEnabled, setCnnEnabled] = useState(true);
   const [showCnnOverlay, setShowCnnOverlay] = useState(true);
 
+  // API Key state (direct mode only)
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [hasApiKey, setHasApiKey] = useState(hasGeminiApiKey());
+
   // HID Bridge
   const hidBridgeRef = useRef(new HIDBridge((s) => {
     setHardware(prev => ({ ...prev, hidConnected: s.connected, hidMode: s.mode }));
@@ -104,6 +109,8 @@ export default function App() {
   // Refs for loop control
   const loopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastActionRef = useRef<string | undefined>(undefined);
+  const vlmRetryCountRef = useRef(0);
+  const MAX_VLM_RETRIES = 3;
 
   // Set portal connected status
   useEffect(() => {
@@ -218,6 +225,7 @@ export default function App() {
       }
 
       setCurrentAnalysis(analysis);
+      vlmRetryCountRef.current = 0; // Reset retry counter on success
 
       addLog(LogLevel.INFO, "Analysis Complete", {
         confidence: analysis.confidence,
@@ -245,8 +253,38 @@ export default function App() {
       }, 1000);
 
     } catch (error: any) {
-      addLog(LogLevel.ERROR, "Perception Failure", { message: error?.message || String(error) });
-      setStatus(AgentStatus.ERROR);
+      const message = error?.message || String(error);
+      vlmRetryCountRef.current += 1;
+
+      // Camera permission errors — prompt user to re-grant
+      if (message.includes('Permission') || message.includes('NotAllowed') || message.includes('camera')) {
+        addLog(LogLevel.ERROR, "Camera access lost — please re-grant camera permission", { message });
+        setHardware(prev => ({ ...prev, cameraActive: false }));
+        setStatus(AgentStatus.ERROR);
+        vlmRetryCountRef.current = 0;
+        return;
+      }
+
+      // HID disconnect during operation
+      if (message.includes('serial') || message.includes('device has been lost') || message.includes('NetworkError')) {
+        addLog(LogLevel.WARNING, "HID connection lost — attempting reconnection", { message });
+        setHardware(prev => ({ ...prev, hidConnected: false, hidMode: 'none' as HIDMode }));
+        // Don't enter error state — agent can continue without HID
+      }
+
+      // VLM failure with exponential backoff retry
+      if (vlmRetryCountRef.current <= MAX_VLM_RETRIES) {
+        const backoffMs = Math.min(1000 * Math.pow(2, vlmRetryCountRef.current - 1), 8000);
+        addLog(LogLevel.WARNING, `VLM query failed (attempt ${vlmRetryCountRef.current}/${MAX_VLM_RETRIES}), retrying in ${backoffMs}ms`, { message });
+        setStatus(AgentStatus.IDLE);
+        loopTimerRef.current = setTimeout(() => {
+          setStatus(AgentStatus.PERCEIVING);
+        }, backoffMs);
+      } else {
+        addLog(LogLevel.ERROR, `VLM query failed after ${MAX_VLM_RETRIES} retries. Stopping.`, { message });
+        vlmRetryCountRef.current = 0;
+        setStatus(AgentStatus.ERROR);
+      }
     }
   }, [status, goal, config, addLog, annotations, compositeBase64, selectedDevice]);
 
@@ -260,7 +298,20 @@ export default function App() {
         await hidBridgeRef.current.executeDuckyScript(analysis.duckyScript);
         addLog(LogLevel.SUCCESS, "Payload injected via HID bridge");
       } catch (err: any) {
-        addLog(LogLevel.ERROR, `HID execution failed: ${err.message}`);
+        const errMsg = err?.message || String(err);
+        if (errMsg.includes('device has been lost') || errMsg.includes('serial')) {
+          addLog(LogLevel.WARNING, "HID disconnected during execution — switching to clipboard mode");
+          setHardware(prev => ({ ...prev, hidConnected: false, hidMode: 'none' as HIDMode }));
+          // Copy to clipboard as fallback
+          if (analysis.duckyScript) {
+            try {
+              await navigator.clipboard.writeText(analysis.duckyScript);
+              addLog(LogLevel.INFO, "Payload copied to clipboard as fallback");
+            } catch {}
+          }
+        } else {
+          addLog(LogLevel.ERROR, `HID execution failed: ${errMsg}`);
+        }
       }
     } else {
       addLog(LogLevel.SUCCESS, "Payload generated (no HID connected — copy to use)");
@@ -707,6 +758,55 @@ export default function App() {
                   <ToggleRow label="Route through Portal" active={config.useLLMProxy}
                     onToggle={() => setConfig(p => ({ ...p, useLLMProxy: !p.useLLMProxy }))}
                     color="bg-purple-500" />
+                )}
+
+                {/* API Key input for direct mode */}
+                {!config.useLLMProxy && (
+                  <div className="p-2 rounded bg-industrial-900/50 border border-industrial-700/50">
+                    <div className="flex items-center gap-2 mb-2">
+                      <KeyRound size={12} className={hasApiKey ? 'text-terminal-green' : 'text-gray-500'} />
+                      <span className="text-xs text-gray-400">
+                        Gemini API Key {hasApiKey ? '(configured)' : '(required for direct mode)'}
+                      </span>
+                    </div>
+                    <div className="flex gap-1">
+                      <input
+                        type="password"
+                        value={apiKeyInput}
+                        onChange={(e) => setApiKeyInput(e.target.value)}
+                        placeholder={hasApiKey ? '••••••••' : 'Enter API key'}
+                        className="flex-1 bg-black border border-industrial-600 rounded px-2 py-1 text-xs font-mono text-white focus:outline-none focus:border-terminal-blue"
+                      />
+                      <button
+                        onClick={() => {
+                          if (apiKeyInput.trim()) {
+                            setGeminiApiKey(apiKeyInput.trim());
+                            setHasApiKey(true);
+                            setApiKeyInput('');
+                            addLog(LogLevel.SUCCESS, 'Gemini API key configured (session only)');
+                          }
+                        }}
+                        className="px-2 py-1 text-xs font-bold bg-terminal-green/20 text-terminal-green rounded hover:bg-terminal-green/30"
+                      >
+                        Set
+                      </button>
+                      {hasApiKey && (
+                        <button
+                          onClick={() => {
+                            clearGeminiApiKey();
+                            setHasApiKey(false);
+                            addLog(LogLevel.INFO, 'Gemini API key cleared');
+                          }}
+                          className="px-2 py-1 text-xs font-bold bg-terminal-red/20 text-terminal-red rounded hover:bg-terminal-red/30"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[9px] text-gray-600 mt-1 font-mono">
+                      Stored in sessionStorage only — cleared on tab close
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
