@@ -183,15 +183,19 @@ class DuckyScriptParser:
         screen_h: int = 1080,
         humanizer: Humanizer | None = None,
         default_inter_key_ms: int = 12,
+        scale_x: float = 1.0,
+        scale_y: float = 1.0,
     ) -> None:
         self.screen_w = screen_w
         self.screen_h = screen_h
         self.humanizer = humanizer or Humanizer()
         self.default_inter_key_ms = default_inter_key_ms
+        self.scale_x = scale_x
+        self.scale_y = scale_y
 
         # Current absolute cursor position (for relative delta computation)
-        self._cursor_x: float = screen_w / 2
-        self._cursor_y: float = screen_h / 2
+        self._cursor_x: float = (screen_w / 2) * scale_x
+        self._cursor_y: float = (screen_h / 2) * scale_y
 
     # ------------------------------------------------------------------
     # Public API
@@ -267,8 +271,12 @@ class DuckyScriptParser:
         # MOUSE_MOVE x y — absolute target coordinates
         m = self._RE_MOUSE_MOVE.match(line)
         if m:
-            target_x = int(m.group(1))
-            target_y = int(m.group(2))
+            # Apply scaling to convert logical screen pixels to HID units
+            raw_x = int(m.group(1))
+            raw_y = int(m.group(2))
+            target_x = raw_x * self.scale_x
+            target_y = raw_y * self.scale_y
+
             points = self.humanizer.bezier_path(
                 self._cursor_x, self._cursor_y,
                 float(target_x), float(target_y),

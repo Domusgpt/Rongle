@@ -36,7 +36,7 @@ class Settings:
     local_vlm_model: str = "HuggingFaceTB/SmolVLM-256M-Instruct"
 
     # Policy
-    allowlist_path: str = "operator/config/allowlist.json"
+    allowlist_path: str = "rongle_operator/config/allowlist.json"
 
     # Audit
     audit_log_path: str = "/mnt/secure/audit.jsonl"
@@ -49,7 +49,7 @@ class Settings:
     confidence_threshold: float = 0.5
 
     @classmethod
-    def load(cls, path: str | Path = "operator/config/settings.json") -> Settings:
+    def load(cls, path: str | Path = "rongle_operator/config/settings.json") -> Settings:
         """Load settings from a JSON file, falling back to defaults."""
         p = Path(path)
         if not p.exists():
@@ -65,7 +65,7 @@ class Settings:
 
         return cls(**filtered)
 
-    def save(self, path: str | Path = "operator/config/settings.json") -> None:
+    def save(self, path: str | Path = "rongle_operator/config/settings.json") -> None:
         """Persist current settings to JSON."""
         import dataclasses
         p = Path(path)

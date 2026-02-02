@@ -62,19 +62,17 @@ def calibrate(
     hid: HIDGadget,
     audit: AuditLogger,
     max_attempts: int = 5,
-) -> tuple[int, int] | None:
+) -> tuple[float, float, int, int] | None:
     """
     Self-Calibration Procedure
     --------------------------
     1. LOOK  — Capture a frame from the HDMI feed.
     2. DETECT — Use ReflexTracker to locate the current cursor position.
     3. MOVE  — Nudge the cursor by a known delta via HID.
-    4. VERIFY — Recapture and confirm the cursor moved by the expected amount.
+    4. VERIFY — Recapture and confirm the cursor moved.
+    5. CALCULATE — Derive scaling factors (HID units / Screen pixels).
 
-    If the observed delta matches the injected delta (within tolerance),
-    calibration is confirmed and the coordinate system is trusted.
-
-    Returns the detected cursor (x, y) or None if calibration fails.
+    Returns (scale_x, scale_y, cursor_x, cursor_y) or None if calibration fails.
     """
     logger.info("=== SELF-CALIBRATION START ===")
     audit.log("CALIBRATION_START", action_detail="Beginning coordinate calibration")
@@ -127,27 +125,28 @@ def calibrate(
 
         actual_dx = detection_after.x - detection_before.x
         actual_dy = detection_after.y - detection_before.y
-        tolerance = 15  # pixels
 
-        if abs(actual_dx - known_dx) <= tolerance and abs(actual_dy - known_dy) <= tolerance:
-            logger.info(
-                "Calibration PASSED: expected (%d,%d) observed (%d,%d)",
-                known_dx, known_dy, actual_dx, actual_dy,
-            )
-            audit.log(
-                "CALIBRATION_PASS",
-                screenshot_hash=frame_after.sha256,
-                action_detail=(
-                    f"Verified: expected delta ({known_dx},{known_dy}), "
-                    f"observed ({actual_dx},{actual_dy})"
-                ),
-            )
-            return detection_after.x, detection_after.y
-        else:
+        # Determine if movement was significant enough to calculate scale
+        if abs(actual_dx) < 5 or abs(actual_dy) < 5:
             logger.warning(
-                "Calibration mismatch: expected (%d,%d) got (%d,%d)",
-                known_dx, known_dy, actual_dx, actual_dy,
+                "Movement too small for calibration: dx=%d dy=%d",
+                actual_dx, actual_dy
             )
+            continue
+
+        scale_x = known_dx / actual_dx
+        scale_y = known_dy / actual_dy
+
+        logger.info(
+            "Calibration PASSED: scale_x=%.3f scale_y=%.3f (expected %d,%d observed %d,%d)",
+            scale_x, scale_y, known_dx, known_dy, actual_dx, actual_dy,
+        )
+        audit.log(
+            "CALIBRATION_PASS",
+            screenshot_hash=frame_after.sha256,
+            action_detail=f"Scale calculated: x={scale_x:.3f}, y={scale_y:.3f}",
+        )
+        return scale_x, scale_y, detection_after.x, detection_after.y
 
     logger.error("Calibration FAILED after %d attempts", max_attempts)
     audit.log("CALIBRATION_FAIL", action_detail="All calibration attempts exhausted")
@@ -338,7 +337,7 @@ def agent_loop(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hardware-Isolated Agentic Operator")
     parser.add_argument("--goal", type=str, default="", help="Agent goal (interactive if empty)")
-    parser.add_argument("--config", type=str, default="operator/config/settings.json",
+    parser.add_argument("--config", type=str, default="rongle_operator/config/settings.json",
                         help="Path to settings JSON")
     parser.add_argument("--dry-run", action="store_true", help="No actual HID output")
     parser.add_argument("--software-estop", action="store_true",
@@ -420,12 +419,16 @@ def main() -> None:
         audit.log("SYSTEM_START", action_detail="All modules initialized")
 
         # Self-calibration
-        cursor_pos = calibrate(grabber, tracker, hid, audit)
-        if cursor_pos is None:
+        cal_result = calibrate(grabber, tracker, hid, audit)
+        if cal_result is None:
             logger.error("Calibration failed — entering safe mode")
             audit.log("SAFE_MODE", action_detail="Calibration failure, awaiting manual input")
         else:
-            ducky_parser._cursor_x, ducky_parser._cursor_y = cursor_pos
+            sx, sy, cx, cy = cal_result
+            ducky_parser.scale_x = sx
+            ducky_parser.scale_y = sy
+            ducky_parser._cursor_x = cx * sx
+            ducky_parser._cursor_y = cy * sy
 
         # Agent goal
         goal = args.goal

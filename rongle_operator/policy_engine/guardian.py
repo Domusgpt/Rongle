@@ -37,6 +37,22 @@ class ClickRegion:
 
 
 @dataclass
+class TimeWindowRule:
+    """Allowed time window for operation (24h format)."""
+    start_hour: int = 0
+    end_hour: int = 24
+
+    def is_allowed(self) -> bool:
+        """Check if current time is within the allowed window."""
+        current_hour = time.localtime().tm_hour
+        if self.start_hour <= self.end_hour:
+            return self.start_hour <= current_hour < self.end_hour
+        else:
+            # Window crosses midnight (e.g. 22 to 06)
+            return current_hour >= self.start_hour or current_hour < self.end_hour
+
+
+@dataclass
 class PolicyVerdict:
     """Result of a policy check."""
     allowed: bool
@@ -54,6 +70,8 @@ class PolicyConfig:
     max_mouse_speed_px_per_s: float = 5000.0
     allow_all_regions: bool = False
     blocked_key_combos: list[str] = field(default_factory=list)
+    time_window: TimeWindowRule | None = None
+    blocked_sequences: list[list[str]] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -69,39 +87,14 @@ class PolicyGuardian:
         verdict = guardian.check_keyboard("STRING rm -rf /")
         if not verdict.allowed:
             print(f"BLOCKED: {verdict.reason}")
-
-    The allowlist.json schema::
-
-        {
-            "allowed_regions": [
-                {"x_min": 0, "y_min": 0, "x_max": 1920, "y_max": 1080, "label": "full screen"}
-            ],
-            "blocked_keystroke_patterns": [
-                "rm\\\\s+-rf",
-                ":(){ :|:& };:",
-                "dd\\\\s+if=",
-                "mkfs\\\\.",
-                "format\\\\s+[a-z]:",
-                "> /dev/sd[a-z]",
-                "chmod\\\\s+777",
-                "curl.*\\\\|.*sh",
-                "wget.*\\\\|.*sh"
-            ],
-            "allowed_keystroke_patterns": [],
-            "max_commands_per_second": 50,
-            "max_mouse_speed_px_per_s": 5000,
-            "allow_all_regions": false,
-            "blocked_key_combos": [
-                "CTRL ALT DELETE",
-                "ALT F4"
-            ]
-        }
     """
 
-    def __init__(self, allowlist_path: str | Path = "config/allowlist.json") -> None:
+    def __init__(self, allowlist_path: str | Path = "rongle_operator/config/allowlist.json") -> None:
         self.allowlist_path = Path(allowlist_path)
         self._config = PolicyConfig()
         self._command_timestamps: list[float] = []
+        self._command_history: list[str] = []  # Last N commands for sequence checking
+        self._history_len = 5
         self.load()
 
     # ------------------------------------------------------------------
@@ -132,6 +125,13 @@ class PolicyGuardian:
             for p in raw.get("allowed_keystroke_patterns", [])
         ]
 
+        time_window = None
+        if "time_window" in raw:
+            time_window = TimeWindowRule(
+                start_hour=raw["time_window"].get("start_hour", 0),
+                end_hour=raw["time_window"].get("end_hour", 24),
+            )
+
         self._config = PolicyConfig(
             allowed_regions=regions,
             blocked_keystroke_patterns=blocked_patterns,
@@ -140,10 +140,22 @@ class PolicyGuardian:
             max_mouse_speed_px_per_s=raw.get("max_mouse_speed_px_per_s", 5000.0),
             allow_all_regions=raw.get("allow_all_regions", False),
             blocked_key_combos=raw.get("blocked_key_combos", []),
+            time_window=time_window,
+            blocked_sequences=raw.get("blocked_sequences", []),
         )
+
+        # Determine max sequence length to keep relevant history size
+        max_seq_len = 0
+        for seq in self._config.blocked_sequences:
+            if len(seq) > max_seq_len:
+                max_seq_len = len(seq)
+        if max_seq_len > 0:
+            self._history_len = max_seq_len
+
         logger.info(
-            "Policy loaded: %d regions, %d blocked patterns, %d blocked combos",
-            len(regions), len(blocked_patterns), len(self._config.blocked_key_combos),
+            "Policy loaded: %d regions, %d blocked patterns, time_window=%s",
+            len(regions), len(blocked_patterns),
+            f"{time_window.start_hour}-{time_window.end_hour}" if time_window else "None",
         )
 
     # ------------------------------------------------------------------
@@ -152,11 +164,6 @@ class PolicyGuardian:
     def check_keyboard(self, raw_line: str) -> PolicyVerdict:
         """
         Validate a keyboard/string command line.
-
-        Checks:
-          1. Rate limiting
-          2. Blocked keystroke patterns (e.g., 'rm -rf')
-          3. Blocked key combos (e.g., 'CTRL ALT DELETE')
         """
         # Rate limit
         rate_verdict = self._check_rate_limit()
@@ -193,8 +200,6 @@ class PolicyGuardian:
     def check_mouse_click(self, x: int, y: int) -> PolicyVerdict:
         """
         Validate a mouse click at (x, y).
-
-        The click must fall within at least one allowed region.
         """
         rate_verdict = self._check_rate_limit()
         if not rate_verdict.allowed:
@@ -227,28 +232,73 @@ class PolicyGuardian:
     def check_command(self, raw_line: str, cursor_x: int = 0, cursor_y: int = 0) -> PolicyVerdict:
         """
         Unified check for any Ducky Script command line.
-
-        Dispatches to the appropriate specific checker based on command type.
         """
+        # Global checks
+
+        # 1. Time Window
+        if self._config.time_window and not self._config.time_window.is_allowed():
+            return PolicyVerdict(
+                allowed=False,
+                reason="Operation blocked outside allowed time window",
+                rule_name="time_window"
+            )
+
+        # 2. Sequence Checking
+        # We need to normalize the command slightly to match broad patterns if needed,
+        # but for now we'll do exact string prefix matching or similar.
+        # We check if [history + current] ends with a blocked sequence.
+
+        # Simplification: treat the command line as the token
+        # This is primitive but satisfies the requirement for "sequence of commands"
+
+        potential_history = self._command_history + [raw_line.strip()]
+        for blocked_seq in self._config.blocked_sequences:
+            # blocked_seq is e.g. ["STRING sudo", "STRING rm"]
+            # Check if potential_history ends with blocked_seq
+            if len(potential_history) >= len(blocked_seq):
+                sub_history = potential_history[-len(blocked_seq):]
+                # Compare fuzzy or exact? Let's do startsWith for now to be generous
+                match = True
+                for i, token in enumerate(blocked_seq):
+                    # Check if the history item starts with the blocked token (ignoring case)
+                    if not sub_history[i].upper().startswith(token.upper()):
+                        match = False
+                        break
+                if match:
+                    return PolicyVerdict(
+                        allowed=False,
+                        reason=f"Blocked command sequence detected: {blocked_seq}",
+                        rule_name="blocked_sequence"
+                    )
+
+        # Dispatch to specific checkers
         upper = raw_line.upper().strip()
+        verdict = PolicyVerdict(allowed=True)
 
         if upper.startswith("MOUSE_CLICK"):
-            return self.check_mouse_click(cursor_x, cursor_y)
-
-        if upper.startswith("MOUSE_MOVE"):
+            verdict = self.check_mouse_click(cursor_x, cursor_y)
+        elif upper.startswith("MOUSE_MOVE"):
             parts = raw_line.split()
             if len(parts) >= 3:
                 try:
                     tx, ty = int(parts[1]), int(parts[2])
-                    return self.check_mouse_move(tx, ty)
+                    verdict = self.check_mouse_move(tx, ty)
                 except ValueError:
-                    pass
+                    verdict = self.check_keyboard(raw_line)
+            else:
+                verdict = self.check_keyboard(raw_line)
+        elif upper.startswith("DELAY"):
+             verdict = PolicyVerdict(allowed=True)
+        else:
+            verdict = self.check_keyboard(raw_line)
 
-        if upper.startswith("DELAY"):
-            return PolicyVerdict(allowed=True)
+        # Update history if allowed
+        if verdict.allowed:
+            self._command_history.append(raw_line.strip())
+            if len(self._command_history) > self._history_len:
+                self._command_history.pop(0)
 
-        # All other commands (STRING, key combos, etc.)
-        return self.check_keyboard(raw_line)
+        return verdict
 
     # ------------------------------------------------------------------
     # Rate limiting

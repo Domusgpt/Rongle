@@ -85,7 +85,7 @@ The Android path lets anyone test with a phone and a $5 USB dongle. The Pi path 
 
 ```
 Rongle/
-├── operator/                      # Python — Pi hardware daemon
+├── rongle_operator/               # Python — Pi hardware daemon
 │   ├── main.py                    # Orchestrator: calibrate + agent loop
 │   ├── config/
 │   │   ├── settings.py            # Dataclass configuration (JSON load/save)
@@ -205,17 +205,16 @@ sudo dtoverlay dwc2
 # See docs/SETUP.md for detailed instructions
 
 # 2. Install Python dependencies
-cd operator
-pip install -r requirements.txt
+pip install -r rongle_operator/requirements.txt
 
 # 3. Connect HDMI capture card to target monitor
 
 # 4. Run
 export GEMINI_API_KEY=your_key_here
-python -m operator.main --goal "Open Notepad and type Hello World"
+python -m rongle_operator.main --goal "Open Notepad and type Hello World"
 
 # Or interactive mode:
-python -m operator.main
+python -m rongle_operator.main
 ```
 
 ### Portal (Management API)
@@ -327,7 +326,7 @@ The annotation engine composites numbered marks and bounding boxes onto camera f
 
 ## Configuration
 
-### Operator Settings (`operator/config/settings.json`)
+### Operator Settings (`rongle_operator/config/settings.json`)
 
 ```json
 {
@@ -341,7 +340,7 @@ The annotation engine composites numbered marks and bounding boxes onto camera f
   "humanizer_overshoot": 0.25,
   "vlm_model": "gemini-2.0-flash",
   "local_vlm_model": "HuggingFaceTB/SmolVLM-256M-Instruct",
-  "allowlist_path": "operator/config/allowlist.json",
+  "allowlist_path": "rongle_operator/config/allowlist.json",
   "audit_log_path": "/mnt/secure/audit.jsonl",
   "estop_gpio_line": 17,
   "max_iterations": 100,
@@ -408,7 +407,7 @@ npm run dev
 uvicorn portal.app:app --reload --host 0.0.0.0 --port 8000
 
 # Operator dry-run (no actual HID output)
-python -m operator.main --dry-run --software-estop
+python -m rongle_operator.main --dry-run --software-estop
 
 # Build frontend for production
 npm run build
