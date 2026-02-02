@@ -20,6 +20,9 @@ import { analyzeScreenFrame } from './services/gemini';
 import { portalAPI } from './services/portal-api';
 import { generateAnnotationPrompt } from './services/canvas-annotator';
 import { HIDBridge } from './services/hid-bridge';
+import { rongleCNN } from './services/cnn';
+import type { Detection, Classification, FrameDiff, EngineStatus } from './services/cnn';
+import { CNNOverlay } from './components/CNNOverlay';
 import {
   Power,
   Play,
@@ -37,6 +40,8 @@ import {
   Send,
   Cloud,
   Layers,
+  Cpu,
+  Eye,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -83,6 +88,14 @@ export default function App() {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [compositeBase64, setCompositeBase64] = useState<string | null>(null);
 
+  // CNN state
+  const [cnnDetections, setCnnDetections] = useState<Detection[]>([]);
+  const [cnnClassification, setCnnClassification] = useState<Classification | null>(null);
+  const [cnnFrameDiff, setCnnFrameDiff] = useState<FrameDiff | null>(null);
+  const [cnnStatus, setCnnStatus] = useState<EngineStatus>(rongleCNN.getStatus());
+  const [cnnEnabled, setCnnEnabled] = useState(true);
+  const [showCnnOverlay, setShowCnnOverlay] = useState(true);
+
   // HID Bridge
   const hidBridgeRef = useRef(new HIDBridge((s) => {
     setHardware(prev => ({ ...prev, hidConnected: s.connected, hidMode: s.mode }));
@@ -102,6 +115,18 @@ export default function App() {
       setConfig(prev => ({ ...prev, useLLMProxy: true }));
     }
   }, [authState.isAuthenticated]);
+
+  // Initialize CNN engine on mount
+  useEffect(() => {
+    if (!cnnEnabled) return;
+    rongleCNN.init().then(ok => {
+      setCnnStatus(rongleCNN.getStatus());
+      if (ok) {
+        console.log('[App] CNN engine initialized');
+      }
+    });
+    return () => { rongleCNN.dispose(); };
+  }, []);
 
   // Helper to add logs
   const addLog = useCallback((level: LogLevel, message: string, metadata?: any) => {
@@ -137,6 +162,26 @@ export default function App() {
     try {
       addLog(LogLevel.INFO, "Analyzing visual input...");
       const t0 = Date.now();
+
+      // Run CNN inference in parallel with VLM (fast local processing)
+      if (cnnEnabled && rongleCNN.getStatus().ready) {
+        rongleCNN.processFrame(base64Image, 1920, 1080).then(cnnResult => {
+          setCnnDetections(cnnResult.detections);
+          setCnnClassification(cnnResult.classification);
+          setCnnFrameDiff(cnnResult.frameDiff);
+          setCnnStatus(rongleCNN.getStatus());
+
+          if (cnnResult.detections.length > 0) {
+            addLog(LogLevel.INFO, `CNN: ${cnnResult.detections.length} UI elements detected in ${cnnResult.inferenceMs.toFixed(0)}ms`);
+          }
+          if (cnnResult.classification) {
+            addLog(LogLevel.INFO, `CNN: Screen type → ${cnnResult.classification.class} (${(cnnResult.classification.confidence * 100).toFixed(0)}%)`);
+          }
+          if (cnnResult.frameDiff && cnnResult.frameDiff.changePercent < 0.01) {
+            addLog(LogLevel.INFO, 'CNN: No significant frame change detected');
+          }
+        }).catch(() => { /* CNN errors don't block VLM */ });
+      }
 
       // Build prompt with annotation context if available
       let annotationSuffix = '';
@@ -403,6 +448,18 @@ export default function App() {
                   annotationsEnabled={config.annotationsEnabled}
                   onCameraActive={(active) => setHardware(prev => ({ ...prev, cameraActive: active }))}
                 />
+                {showCnnOverlay && cnnEnabled && (
+                  <CNNOverlay
+                    detections={cnnDetections}
+                    classification={cnnClassification}
+                    frameDiff={cnnFrameDiff}
+                    engineStatus={cnnStatus}
+                    containerWidth={640}
+                    containerHeight={480}
+                    imageWidth={1920}
+                    imageHeight={1080}
+                  />
+                )}
               </div>
 
               {/* Goal Input */}
@@ -581,6 +638,48 @@ export default function App() {
               <ActionLog logs={logs} />
             </div>
 
+            {/* CNN Status */}
+            {cnnEnabled && (
+              <div className="bg-industrial-800 rounded-xl border border-industrial-700 p-4">
+                <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                  <Cpu size={16} className="text-pink-400" />
+                  CNN Engine
+                </h3>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-industrial-900/50 p-2 rounded border border-industrial-700/50">
+                    <span className="text-[10px] text-gray-500 uppercase font-mono block">Backend</span>
+                    <span className={`text-xs font-mono ${cnnStatus.ready ? 'text-terminal-green' : 'text-gray-500'}`}>
+                      {cnnStatus.backend.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="bg-industrial-900/50 p-2 rounded border border-industrial-700/50">
+                    <span className="text-[10px] text-gray-500 uppercase font-mono block">Inference</span>
+                    <span className="text-xs font-mono text-terminal-blue">{cnnStatus.avgInferenceMs}ms</span>
+                  </div>
+                  <div className="bg-industrial-900/50 p-2 rounded border border-industrial-700/50">
+                    <span className="text-[10px] text-gray-500 uppercase font-mono block">Detections</span>
+                    <span className="text-xs font-mono text-terminal-amber">{cnnDetections.length}</span>
+                  </div>
+                </div>
+                {cnnClassification && (
+                  <div className="mt-2 text-[10px] font-mono text-gray-400 bg-industrial-900/50 p-2 rounded border border-industrial-700/50">
+                    Screen: <span className="text-terminal-amber">{cnnClassification.class}</span> ({(cnnClassification.confidence * 100).toFixed(0)}%)
+                    {cnnFrameDiff && (
+                      <span className="ml-2 text-terminal-blue">
+                        Change: {(cnnFrameDiff.changePercent * 100).toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                )}
+                {!rongleCNN.hasTrainedWeights() && cnnStatus.ready && (
+                  <div className="mt-2 text-[10px] font-mono text-gray-500 bg-terminal-amber/5 p-1.5 rounded border border-terminal-amber/20">
+                    <Eye size={10} className="inline mr-1 text-terminal-amber" />
+                    Random weights — load trained model for accurate detection
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Config */}
             <div className="bg-industrial-800 rounded-xl border border-industrial-700 p-4">
               <div className="flex items-center justify-between mb-4">
@@ -598,6 +697,12 @@ export default function App() {
                 <ToggleRow label="Annotations (Set-of-Mark)" active={config.annotationsEnabled}
                   onToggle={() => setConfig(p => ({ ...p, annotationsEnabled: !p.annotationsEnabled }))}
                   color="bg-terminal-amber" />
+                <ToggleRow label="CNN Vision (local)" active={cnnEnabled}
+                  onToggle={() => setCnnEnabled(p => !p)}
+                  color="bg-pink-500" />
+                <ToggleRow label="CNN Overlay" active={showCnnOverlay}
+                  onToggle={() => setShowCnnOverlay(p => !p)}
+                  color="bg-indigo-500" />
                 {authState.isAuthenticated && (
                   <ToggleRow label="Route through Portal" active={config.useLLMProxy}
                     onToggle={() => setConfig(p => ({ ...p, useLLMProxy: !p.useLLMProxy }))}
