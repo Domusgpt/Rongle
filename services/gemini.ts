@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { VisionAnalysisResult } from "../types";
+import { api } from "./portal-api";
 
 // ---------------------------------------------------------------------------
 // Runtime API key management (NEVER baked into the bundle)
@@ -63,8 +64,28 @@ export const analyzeScreenFrame = async (
       Return the response in JSON format.
     `;
 
+    // Priority 1: Use Portal Proxy if configured and authenticated
+    const portalUrl = import.meta.env.VITE_PORTAL_URL;
+    if (portalUrl && !getGeminiApiKey()) {
+      // Assuming we have an auth token if we are using the portal
+      const response = await api.post<{ result: string }>('/llm/query', {
+        prompt,
+        image_base64: base64Image,
+        model: 'gemini-2.0-flash'
+      });
+      if (response.result) {
+        // The portal returns the raw JSON string from the LLM
+        // We might need to clean it if it contains markdown fences,
+        // but the backend service usually handles that or returns cleaned text.
+        // For safety, let's try to parse it.
+        let cleaned = response.result.replace(/```json\n?|```/g, '');
+        return JSON.parse(cleaned) as VisionAnalysisResult;
+      }
+    }
+
+    // Priority 2: Direct Gemini API (Dev/Standalone mode)
     const response = await getClient().models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.0-flash', // Updated model
       contents: {
         parts: [
           {

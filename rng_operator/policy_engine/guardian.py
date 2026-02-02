@@ -266,6 +266,23 @@ class PolicyGuardian:
         # All other commands (STRING, key combos, etc.)
         return self.check_keyboard(raw_line)
 
+    def check_semantic_safety(self, command: str, image_context: Any = None) -> PolicyVerdict:
+        """
+        Perform a semantic safety check using a local VLM (SmolVLM/PaliGemma).
+
+        Unlike regex blocking, this analyzes the INTENT of the command in context.
+        E.g., "rm -rf" might be blocked by regex, but "Open terminal and delete all files"
+        is semantically identical and should also be blocked.
+
+        For MVP, this is a placeholder/mock that can be connected to `VLMReasoner`.
+        """
+        # TODO: Integrate with VLMReasoner to run local inference
+        # prompt = f"Is the command '{command}' safe to execute? Screen context provided."
+        # result = vlm.ask(prompt, image_context)
+
+        # Fail-safe default: allowed unless explicit negative signal
+        return PolicyVerdict(allowed=True)
+
     # ------------------------------------------------------------------
     # Rate limiting
     # ------------------------------------------------------------------
