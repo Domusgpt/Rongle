@@ -9,7 +9,7 @@ Its core value proposition is **operating any computer through an air gap**, mea
 ## How It Works
 
 The system is composed of three main parts:
-1.  **Operator (The "Hands")**: A Python daemon running on hardware (Raspberry Pi or Android) that manages the camera, runs the agent loop, and sends USB commands.
+1.  **Operator (The "Hands")**: A Python daemon (`rongle_operator`) running on hardware (Raspberry Pi or Android) that manages the camera, runs the agent loop, and sends USB commands.
 2.  **Frontend (The "Eyes" & Interface)**: A React-based PWA that provides the user interface, real-time video feed, and currently hosts the lighter-weight vision models (CNNs).
 3.  **Portal (The "Brain" / Manager)**: A FastAPI backend for user authentication, device management, and proxying requests to powerful LLMs (like Gemini).
 
@@ -19,33 +19,34 @@ The core operation follows a continuous cycle: **LOOK → DETECT → ACT → VER
 1.  **LOOK**: The system captures a frame of the target screen via a camera (Android) or HDMI capture card (Pi).
 2.  **DETECT**:
     *   **VLM Reasoner**: A Vision Language Model (e.g., Google Gemini, SmolVLM) analyzes the screen to understand context and decide the next step towards the user's goal.
-    *   **CNN Vision (Local)**: A faster, local TensorFlow.js model attempts to detect specific UI elements (buttons, fields) to reduce latency (currently in early stages).
+    *   **CNN Vision (Local)**: A faster, local TensorFlow.js model attempts to detect specific UI elements (buttons, fields) to reduce latency.
 3.  **ACT**:
-    *   The intent is converted into **Ducky Script** (e.g., `MOUSE_MOVE 500 500`, `STRING "Hello"`).
-    *   **Policy Engine**: A safety layer checks the command against an "allowlist" to block dangerous actions (e.g., `rm -rf`).
-    *   **Hygienic Actuator**: Converts script to USB HID reports, adding "humanizing" noise (jitter, curves) to mouse movements to evade bot detection.
-4.  **VERIFY**: The system captures a new frame to confirm the action succeeded (e.g., did the menu open?).
+    *   The intent is converted into **Ducky Script**.
+    *   **Policy Engine**: A safety layer (`guardian.py`) checks the command against an allowlist, time windows, and blocked sequences. It can also perform a semantic safety check using a local VLM.
+    *   **Hygienic Actuator**: Converts script to USB HID reports. It uses **Visual Servoing** to actively guide the mouse to the target using real-time feedback, ensuring accuracy even without knowledge of host mouse acceleration.
+4.  **VERIFY**: The system captures a new frame to confirm the action succeeded (e.g., `ASSERT_VISIBLE` commands).
 
 ### Key Technologies
 *   **Vision**: Google Gemini API, TensorFlow.js (MobileNet-SSD), OpenCV.
 *   **Control**: Linux USB Gadget API (`/dev/hidg*`), Web Serial API.
-*   **Security**: Merkle Chain Audit Logging, Hardware Dead-man Switch (GPIO).
+*   **Security**: Merkle Chain Audit Logging (`SHA256(timestamp||action||screenshot||prev)`), Hardware Dead-man Switch (GPIO).
+*   **Infrastructure**: PostgreSQL (persistence), Redis (rate limiting).
 
-## Continued Development Roadmap
+## Implemented Roadmap
 
-To move Rongle from its current "MVP" state to a production-ready system, development would likely focus on:
+The following strategic optimizations have been implemented to move Rongle from MVP to Enterprise Scale:
 
-### 1. Vision System Maturity
-*   **Train Local CNNs**: The current code notes that local CNN models utilize "random weights". A significant effort is needed to collect UI datasets and train the MobileNet-SSD models so the agent can detect buttons/inputs locally and instantly, reducing reliance on slower/expensive cloud VLMs.
-*   **VLM Optimization**: Implementing "Set-of-Mark" prompting more robustly to improve the accuracy of the VLM's spatial understanding (grounding).
+### 1. Architectural Evolution
+*   **Renaming**: The backend package has been renamed to `rongle_operator` to avoid standard library conflicts.
+*   **Persistence**: The Portal now supports PostgreSQL via `DATABASE_URL` and Redis-based rate limiting via `REDIS_URL`.
 
-### 2. Robustness & Calibration
-*   **Auto-Calibration**: The "Self-Calibration" routine (detecting cursor position) needs to be rock-solid across various screen resolutions and aspect ratios.
-*   **Error Recovery**: The agent needs better strategies for when it gets "lost" or when an action fails (e.g., clicking a button that didn't respond).
+### 2. Security Hardening
+*   **Advanced Policy**: The Policy Engine now supports `TimeWindowRule`, `SequenceRule`, and `semantic_safety_check` to prevent unauthorized or dangerous actions.
+*   **Strict Audit**: The Audit Logger strictly adheres to the Merkle Hash Chain specification for tamper-evidence.
 
-### 3. Hardware & Safety
-*   **Production Hardware**: Finalizing the Raspberry Pi "HAT" or custom PCB design for the hardware operator, ensuring the HDMI capture and USB injection are stable.
-*   **Enhanced Safety**: Expanding the Policy Engine to support more complex, context-aware rules (e.g., "allow clicking 'Delete' only if inside the 'Trash' folder").
+### 3. Actuation Refinement
+*   **Visual Servoing**: A closed-loop control system (`servoing.py`) now guides mouse clicks to their targets, correcting for drift or acceleration issues in real-time.
+*   **Reactive Ducky Script**: Added `WAIT_FOR_IMAGE` and `ASSERT_VISIBLE` commands to enable robust, conditional automation scripts.
 
-### 4. Fleet Management (Portal)
-*   Building out the **Portal** to manage multiple agents simultaneously, view centralized audit logs, and push policy updates to fleets of devices.
+### 4. Vision & Training
+*   **Data Collection**: A `training/data_collector.py` utility is available to harvest annotated frames for training local CNN models, reducing reliance on cloud VLMs.
