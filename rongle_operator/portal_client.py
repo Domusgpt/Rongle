@@ -53,6 +53,11 @@ class PortalClient:
         self._ws = None
         self._ws_task: asyncio.Task | None = None
 
+        # Batch buffer
+        self._audit_buffer: list[dict] = []
+        self._flush_threshold = 10
+        self._last_flush = time.time()
+
     # ------------------------------------------------------------------
     # HTTP helpers
     # ------------------------------------------------------------------
@@ -125,10 +130,38 @@ class PortalClient:
         return await self._post("/api/llm/query", payload)
 
     # ------------------------------------------------------------------
-    # Audit Sync
+    # Audit Sync (Batched)
     # ------------------------------------------------------------------
+    async def log_audit_entry(self, entry: dict) -> None:
+        """Queue an audit entry for batched upload."""
+        self._audit_buffer.append(entry)
+        if len(self._audit_buffer) >= self._flush_threshold:
+            await self.flush_audit()
+
+    async def flush_audit(self) -> None:
+        """Force upload of buffered audit entries."""
+        if not self._audit_buffer:
+            return
+
+        chunk = self._audit_buffer[:]
+        self._audit_buffer.clear()
+
+        try:
+            await self._post("/api/audit/sync", {
+                "device_api_key": self.api_key,
+                "entries": chunk,
+            })
+            self._last_flush = time.time()
+        except Exception as exc:
+            logger.error("Failed to sync audit buffer: %s", exc)
+            # Re-queue entries on failure (simple retry)
+            # Note: infinite growth risk if portal down long-term.
+            # In prod, use a persistent local queue (SessionManager DB).
+            if len(self._audit_buffer) < 1000:
+                self._audit_buffer = chunk + self._audit_buffer
+
     async def sync_audit(self, entries: list[dict]) -> dict:
-        """Upload audit log entries to the portal."""
+        """Direct upload (legacy compatibility)."""
         return await self._post("/api/audit/sync", {
             "device_api_key": self.api_key,
             "entries": entries,
@@ -186,6 +219,7 @@ class PortalClient:
     # ------------------------------------------------------------------
     async def close(self) -> None:
         """Clean up connections."""
+        await self.flush_audit()
         if self._ws:
             await self._ws.close()
         if self._http:

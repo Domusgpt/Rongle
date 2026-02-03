@@ -91,7 +91,9 @@ def main():
     except KeyboardInterrupt:
         logger.info("Stopped by user")
     finally:
-        grabber.close()
+        # Check if grabber was successfully initialized before closing
+        if 'grabber' in locals():
+            grabber.close()
         logger.info(f"Finished. Total captured: {captured}")
 
 if __name__ == "__main__":

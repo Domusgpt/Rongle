@@ -35,6 +35,7 @@ from .immutable_ledger import AuditLogger
 from .policy_engine import PolicyGuardian, PolicyVerdict
 from .visual_cortex import FrameGrabber, ReflexTracker, VLMReasoner, FastDetector
 from .visual_cortex.vlm_reasoner import GeminiBackend, LocalVLMBackend
+from .session_manager import SessionManager, AgentSession
 
 logger = logging.getLogger("operator")
 
@@ -167,27 +168,38 @@ def agent_loop(
     audit: AuditLogger,
     estop: EmergencyStop,
     detector: FastDetector,
+    session_mgr: SessionManager,
     max_iterations: int = 100,
     confidence_threshold: float = 0.5,
 ) -> None:
     """
-    Core perception-action loop.
-
-    For each iteration:
-      1. LOOK   — capture the current screen
-      2. DETECT — ask the VLM to identify the next UI target
-      3. MOVE   — generate Ducky Script, validate via policy, execute via HID
-      4. VERIFY — re-capture and check if the action had the desired effect
+    Core perception-action loop with state persistence.
     """
-    logger.info("=== AGENT LOOP START === Goal: %s", goal)
-    audit.log("AGENT_START", action_detail=f"Goal: {goal}")
+    # Initialize or resume session
+    current_session = session_mgr.load_active_session()
+    start_iter = 1
+    previous_action = ""
+
+    if current_session and current_session.goal == goal:
+        logger.info("Resuming session %s (step %d)", current_session.session_id, current_session.step_index)
+        start_iter = current_session.step_index + 1
+        if current_session.context_history:
+            previous_action = current_session.context_history[-1]
+    else:
+        # New session
+        session_id = f"sess_{int(time.time())}"
+        current_session = AgentSession(session_id=session_id, goal=goal, step_index=0)
+        logger.info("=== AGENT LOOP START === Goal: %s", goal)
+        audit.log("AGENT_START", action_detail=f"Goal: {goal}")
 
     state = AgentState.PERCEIVING
-    previous_action = ""
     retry_count = 0
     max_retries = 3
 
-    for iteration in range(1, max_iterations + 1):
+    for iteration in range(start_iter, max_iterations + 1):
+        # Update session state
+        current_session.step_index = iteration
+        session_mgr.save_session(current_session)
         # Emergency stop check
         if estop.is_stopped:
             logger.critical("Emergency stop active — halting agent loop")
@@ -413,6 +425,10 @@ def agent_loop(
                 )
 
         previous_action = f"Clicked '{element.label}' at ({target_cx}, {target_cy})"
+        current_session.context_history.append(previous_action)
+        # Trim history if needed
+        if len(current_session.context_history) > 10:
+            current_session.context_history.pop(0)
 
         # ========================================
         # STEP 4: VERIFY — Check result
@@ -442,10 +458,47 @@ def agent_loop(
     logger.info("=== AGENT LOOP END ===")
     audit.log("AGENT_END", action_detail=f"Completed after {iteration} iterations")
 
+    # Mark session as done
+    session_mgr.clear_session(current_session.session_id)
+
 
 # ---------------------------------------------------------------------------
 # Entrypoint
 # ---------------------------------------------------------------------------
+def check_environment(settings: Settings, dry_run: bool) -> None:
+    """Pre-flight check for hardware availability."""
+    if dry_run:
+        logger.info("Dry-run mode: skipping hardware checks.")
+        return
+
+    required = [
+        ("Video Device", settings.video_device),
+        ("Keyboard Gadget", settings.hid_keyboard_dev),
+        ("Mouse Gadget", settings.hid_mouse_dev),
+    ]
+
+    missing = []
+    for name, path in required:
+        if not Path(path).exists():
+            missing.append(f"{name} ({path})")
+
+    # Check write access to audit log directory
+    log_dir = Path(settings.audit_log_path).parent
+    if not os.access(log_dir, os.W_OK):
+        # Try to create it if it doesn't exist
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            missing.append(f"Audit Log Dir Write Access ({log_dir})")
+
+    if missing:
+        msg = f"Environment check failed. Missing: {', '.join(missing)}"
+        logger.error(msg)
+        raise RuntimeError(msg)
+
+    logger.info("Environment check passed.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hardware-Isolated Agentic Operator")
     parser.add_argument("--goal", type=str, default="", help="Agent goal (interactive if empty)")
@@ -467,6 +520,12 @@ def main() -> None:
     )
 
     settings = Settings.load(args.config)
+
+    # Pre-flight checks
+    try:
+        check_environment(settings, args.dry_run)
+    except RuntimeError as e:
+        sys.exit(str(e))
 
     # --- Initialize all modules ---
     humanizer = Humanizer(
@@ -498,6 +557,9 @@ def main() -> None:
     )
     audit = AuditLogger(
         log_path=settings.audit_log_path,
+    )
+    session_mgr = SessionManager(
+        db_path=Path(settings.audit_log_path).parent / "session.db"
     )
 
     # VLM backend
@@ -560,6 +622,7 @@ def main() -> None:
                 audit=audit,
                 estop=estop,
                 detector=detector,
+                session_mgr=session_mgr,
             )
 
     except Exception as exc:

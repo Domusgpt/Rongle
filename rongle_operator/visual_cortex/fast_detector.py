@@ -13,9 +13,16 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+import cv2
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+try:
+    import onnxruntime as ort
+    HAS_ONNX = True
+except ImportError:
+    HAS_ONNX = False
 
 
 @dataclass
@@ -40,24 +47,58 @@ class FastDetector:
 
     def __init__(self, model_path: str | None = None) -> None:
         self.model_path = model_path
-        if model_path:
-            logger.info("FastDetector initialized with model: %s", model_path)
+        self._session = None
+
+        if model_path and HAS_ONNX:
+            try:
+                self._session = ort.InferenceSession(model_path)
+                logger.info("FastDetector initialized with ONNX model: %s", model_path)
+            except Exception as e:
+                logger.error("Failed to load ONNX model: %s", e)
         else:
+            if model_path and not HAS_ONNX:
+                logger.warning("ONNX Runtime not available, falling back to stub.")
             logger.warning("FastDetector running in stub mode (no model)")
 
     def detect(self, frame: np.ndarray) -> list[FastRegion]:
         """
         Run detection on the frame.
-
-        Returns a list of regions that might be interactive UI elements.
         """
-        # In a real implementation:
-        # 1. Preprocess frame (resize, normalize)
-        # 2. Run inference (ONNX Runtime / TFLite)
-        # 3. Postprocess (NMS, decode boxes)
+        if self._session is None:
+            return []
 
-        # Stub: Return an empty list or a dummy region for testing
-        return []
+        # ONNX Inference Logic (MobileNet-SSD specific preprocessing)
+        try:
+            # 1. Preprocess (300x300, normalize to -1..1 or 0..1 depending on model)
+            # Assuming standard MobileNet-SSD input: 1x3x300x300
+            input_shape = (300, 300)
+            img = cv2.resize(frame, input_shape)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = img.transpose(2, 0, 1) # HWC -> CHW
+            img = np.expand_dims(img, axis=0).astype(np.float32)
+
+            # Normalize (approximate, model specific)
+            img = (img - 127.5) / 127.5
+
+            # 2. Run inference
+            input_name = self._session.get_inputs()[0].name
+            # Output format depends on model. Usually [boxes, classes, scores]
+            outputs = self._session.run(None, {input_name: img})
+
+            # 3. Postprocess (Placeholder for standard SSD output decoding)
+            # This part is highly model-specific.
+            # We assume output[0] is boxes [N, 4] and output[1] is scores [N]
+            # Since we don't have the model file to verify output shape,
+            # we wrap this in a try-except to avoid crashing the agent loop.
+
+            # Returning empty for now even if inference runs, as we can't map
+            # output tensors without knowing the exact model export format.
+            # But the ARCHITECTURE is now in place.
+            return []
+
+        except Exception as e:
+            logger.error("Inference failed: %s", e)
+            return []
 
     def get_foveal_crop(self, frame: np.ndarray, regions: list[FastRegion], margin: int = 50) -> tuple[np.ndarray, int, int] | None:
         """

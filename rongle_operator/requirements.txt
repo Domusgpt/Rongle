@@ -3,6 +3,10 @@
 # Core (always required)
 opencv-python-headless>=4.8.0
 numpy>=1.24.0
+aiofiles>=23.0.0
+
+# Vision Inference
+onnxruntime>=1.17.0
 
 # Google Gemini VLM backend
 google-genai>=1.0.0
