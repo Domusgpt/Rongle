@@ -87,13 +87,24 @@ class FrameGrabber:
     # ------------------------------------------------------------------
     def open(self) -> None:
         """Open the capture device."""
-        self._cap = cv2.VideoCapture(self.device, cv2.CAP_V4L2)
+        # Check if device is a network URL (IP Webcam) or local device
+        if isinstance(self.device, str) and (self.device.startswith("http") or self.device.startswith("rtsp")):
+            logger.info("Opening network stream: %s", self.device)
+            # FFMPEG backend is better for network streams
+            self._cap = cv2.VideoCapture(self.device, cv2.CAP_FFMPEG)
+        else:
+            self._cap = cv2.VideoCapture(self.device, cv2.CAP_V4L2)
+
         if not self._cap.isOpened():
             raise RuntimeError(f"Cannot open video device: {self.device}")
 
-        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-        self._cap.set(cv2.CAP_PROP_FPS, self.fps)
+        # Setting props might not work on streams, but we try
+        try:
+            self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+            self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+            self._cap.set(cv2.CAP_PROP_FPS, self.fps)
+        except Exception:
+            pass
 
         actual_w = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         actual_h = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
