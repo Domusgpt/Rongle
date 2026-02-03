@@ -237,18 +237,47 @@ class VLMReasoner:
     """
     High-level reasoner that dispatches to a configured VLM backend.
 
+    Supports dual-stack operation:
+      - Primary Backend: Typically a powerful remote model (Gemini).
+      - Local Backend: A privacy-preserving local model (SmolVLM).
+
     Usage::
 
-        reasoner = VLMReasoner(backend=GeminiBackend(api_key="..."))
-        elements = reasoner.find_element(frame, "the Connect button")
+        reasoner = VLMReasoner(
+            backend=GeminiBackend(api_key="..."),
+            local_backend=LocalVLMBackend()
+        )
+        elements = reasoner.find_element(frame, "the Connect button", require_privacy=True)
     """
 
-    def __init__(self, backend: VLMBackend) -> None:
+    def __init__(
+        self,
+        backend: VLMBackend,
+        local_backend: VLMBackend | None = None
+    ) -> None:
         self.backend = backend
+        self.local_backend = local_backend
 
-    def find_element(self, frame: np.ndarray, description: str) -> UIElement | None:
-        """Find a single UI element matching the natural-language description."""
-        response = self.backend.query(frame, description)
+    def find_element(
+        self,
+        frame: np.ndarray,
+        description: str,
+        require_privacy: bool = False
+    ) -> UIElement | None:
+        """
+        Find a single UI element matching the natural-language description.
+
+        If `require_privacy` is True and a local backend is configured,
+        the query will be routed locally to avoid data exfiltration.
+        """
+        backend = self.backend
+        if require_privacy:
+            if self.local_backend:
+                backend = self.local_backend
+            else:
+                logger.warning("Privacy required but no local backend configured. Falling back to primary.")
+
+        response = backend.query(frame, description)
         if not response.elements:
             logger.info("VLM found no elements for: %s", description)
             return None

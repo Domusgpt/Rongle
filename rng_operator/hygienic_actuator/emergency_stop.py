@@ -67,7 +67,7 @@ class EmergencyStop:
     def start(self) -> None:
         """Begin monitoring the dead-man switch in a background thread."""
         if self.software_only:
-            logger.info("EmergencyStop running in software-only mode")
+            logger.warning("EmergencyStop running in software-only mode (NOT SAFE FOR PRODUCTION)")
             return
 
         try:

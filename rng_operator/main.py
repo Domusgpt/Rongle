@@ -397,6 +397,17 @@ def main() -> None:
     reasoner = VLMReasoner(backend=vlm_backend)
 
     # Emergency stop
+    # In production (not dry-run), we mandate hardware E-Stop unless explicitly overridden
+    must_have_hardware_estop = not args.dry_run and not args.software_estop
+
+    if must_have_hardware_estop:
+        # Check if gpiod is available before starting
+        try:
+            import gpiod
+        except ImportError:
+            logger.critical("FATAL: Hardware E-Stop (gpiod) required for production mode. Install libgpiod or use --dry-run / --software-estop for testing.")
+            sys.exit(1)
+
     estop = EmergencyStop(
         gpio_line=settings.estop_gpio_line,
         on_stop=lambda: hid.release_all(),
