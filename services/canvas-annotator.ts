@@ -119,34 +119,65 @@ export function annotationsFromDetections(boxes: BoundingBox[]): Annotation[] {
 export async function renderAnnotatedFrame(
   imageBase64: string,
   annotations: Annotation[],
+  foveatedRegion?: BoundingBox, // Optional crop region
 ): Promise<string> {
   const img = await loadImage(`data:image/jpeg;base64,${imageBase64}`);
   const canvas = document.createElement('canvas');
-  canvas.width = img.width;
-  canvas.height = img.height;
+
+  // If foveated, we only render the crop
+  if (foveatedRegion) {
+      canvas.width = foveatedRegion.width;
+      canvas.height = foveatedRegion.height;
+  } else {
+      canvas.width = img.width;
+      canvas.height = img.height;
+  }
+
   const ctx = canvas.getContext('2d')!;
 
-  // Draw original frame
-  ctx.drawImage(img, 0, 0);
+  // Draw frame (full or cropped)
+  if (foveatedRegion) {
+      ctx.drawImage(img,
+          foveatedRegion.x, foveatedRegion.y, foveatedRegion.width, foveatedRegion.height,
+          0, 0, foveatedRegion.width, foveatedRegion.height
+      );
+  } else {
+      ctx.drawImage(img, 0, 0);
+  }
 
   // Scale factors: annotations use normalized coords (0-100) or pixel coords
   // We'll support pixel coords directly since that's what the VLM returns
+  // For foveated rendering, we must translate annotation coordinates
+  const offsetX = foveatedRegion ? foveatedRegion.x : 0;
+  const offsetY = foveatedRegion ? foveatedRegion.y : 0;
+
   for (const ann of annotations) {
-    switch (ann.type) {
+    // Skip annotations outside the crop if foveated
+    if (foveatedRegion) {
+        if (ann.x < foveatedRegion.x || ann.x > foveatedRegion.x + foveatedRegion.width ||
+            ann.y < foveatedRegion.y || ann.y > foveatedRegion.y + foveatedRegion.height) {
+            continue;
+        }
+    }
+
+    // Clone and translate
+    const localAnn = { ...ann, x: ann.x - offsetX, y: ann.y - offsetY };
+
+    switch (localAnn.type) {
       case 'mark':
-        drawMark(ctx, ann);
+        drawMark(ctx, localAnn);
         break;
       case 'box':
-        drawBox(ctx, ann);
+        drawBox(ctx, localAnn);
         break;
       case 'zone':
-        drawZone(ctx, ann);
+        drawZone(ctx, localAnn);
         break;
       case 'label':
-        drawLabel(ctx, ann);
+        drawLabel(ctx, localAnn);
         break;
       case 'arrow':
-        drawArrow(ctx, ann);
+        drawArrow(ctx, localAnn);
         break;
     }
   }

@@ -201,13 +201,22 @@ class LocalVLMBackend(VLMBackend):
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(rgb)
 
-        formatted_prompt = (
-            f"Identify all UI elements matching: {prompt}\n"
-            "Return JSON array with keys: label, x, y, width, height, confidence, element_type."
-        )
+        # Chat template handling for SmolVLM
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": f"Identify all UI elements matching: {prompt}\nReturn JSON array with keys: label, x, y, width, height, confidence, element_type."}
+                ]
+            },
+        ]
+
+        # Apply chat template
+        prompt_text = self._processor.apply_chat_template(messages, add_generation_prompt=True)
 
         inputs = self._processor(
-            text=formatted_prompt,
+            text=prompt_text,
             images=pil_image,
             return_tensors="pt",
         ).to(self.device)

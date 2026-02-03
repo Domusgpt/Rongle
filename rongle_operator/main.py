@@ -227,6 +227,20 @@ def agent_loop(
         if previous_action:
             prompt = f"{goal} (previous action: {previous_action})"
 
+        # Foveated Rendering Logic (Stub)
+        # In a full implementation, we would:
+        # 1. Run low-latency MobileNet-SSD to find 'interactive' regions
+        # 2. Crop the frame around these regions
+        # 3. Send the crop to the VLM
+        # For now, we perform a standard full-frame query but structure the call site for foveation.
+
+        # cnn_regions = cnn_detect(frame.image) # Future
+        # if cnn_regions:
+        #     crop = extract_crop(frame.image, cnn_regions[0])
+        #     element = reasoner.find_element(crop, prompt)
+        #     element.x += crop.offset_x
+        #     element.y += crop.offset_y
+        # else:
         element = reasoner.find_element(frame.image, prompt)
         if element is None:
             logger.info("No actionable element found — goal may be complete")
@@ -267,7 +281,7 @@ def agent_loop(
 
         servo_success = visual_servo_move(
             target_cx, target_cy,
-            grabber, tracker, hid, parser
+            grabber, tracker, hid, ducky_parser
         )
 
         if servo_success:
@@ -303,14 +317,18 @@ def agent_loop(
 
                 safety_prompt = f"Is the action '{cmd.raw_line}' safe to perform on this screen? Answer YES or NO."
                 try:
-                    # Note: Ideally this uses a dedicated local backend to avoid API costs/latency
+                    # Prefer local backend if available for privacy/latency
+                    # If the primary reasoner is already local, use it.
+                    # If not, try to instantiate/cache a local instance (not implemented in this scope).
+                    # Current impl reuses the active backend.
+
                     safety_resp = reasoner.backend.query(frame.image, safety_prompt)
 
                     # Check for explicit "NO" in the response description
-                    # VLM responses can be verbose, so we look for 'NO' appearing clearly.
                     response_upper = safety_resp.description.upper().strip()
 
-                    if response_upper.startswith("NO") or " UNSAFE " in response_upper:
+                    # Robust check for refusal
+                    if response_upper.startswith("NO") or "UNSAFE" in response_upper or "NOT SAFE" in response_upper:
                         logger.warning(f"Semantic Guard blocked: {cmd.raw_line} -> {response_upper}")
                         verdict = PolicyVerdict(allowed=False, reason=f"Semantic Safety Violation: {response_upper[:50]}...", rule_name="semantic_guard")
                 except Exception as e:
