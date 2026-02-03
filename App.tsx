@@ -11,6 +11,7 @@ import {
   VisionAnalysisResult 
 } from './types';
 import { analyzeScreenFrame } from './services/gemini';
+import { AgentBridge } from './services/bridge';
 import { 
   Power, 
   Play, 
@@ -21,7 +22,9 @@ import {
   Smartphone,
   Copy,
   Terminal as TerminalIcon,
-  BrainCircuit
+  BrainCircuit,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
 const INITIAL_HARDWARE_STATE: HardwareState = {
@@ -47,10 +50,12 @@ export default function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [goal, setGoal] = useState<string>("Open the calculator app");
   const [currentAnalysis, setCurrentAnalysis] = useState<VisionAnalysisResult | null>(null);
+  const [bridgeConnected, setBridgeConnected] = useState<boolean>(false);
   
   // Refs for loop control
   const loopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastActionRef = useRef<string | undefined>(undefined);
+  const bridgeRef = useRef<AgentBridge | null>(null);
 
   // Helper to add logs
   const addLog = useCallback((level: LogLevel, message: string, metadata?: any) => {
@@ -62,6 +67,20 @@ export default function App() {
       metadata
     }]);
   }, []);
+
+  // Initialize Bridge
+  useEffect(() => {
+    bridgeRef.current = new AgentBridge(
+      "ws://localhost:8000",
+      addLog,
+      setBridgeConnected
+    );
+    bridgeRef.current.connect();
+
+    return () => {
+      bridgeRef.current?.disconnect();
+    };
+  }, [addLog]);
 
   // Emergency Stop
   const handleEmergencyStop = useCallback(() => {
@@ -124,20 +143,27 @@ export default function App() {
 
   const proceedToAct = (analysis: VisionAnalysisResult) => {
     setStatus(AgentStatus.ACTING);
-    addLog(LogLevel.ACTION, `Generating Ducky Script payload...`);
+    addLog(LogLevel.ACTION, `Transmitting Payload...`);
     
-    // Simulate HID Latency / Script Execution
-    setTimeout(() => {
-      lastActionRef.current = analysis.suggestedAction;
-      setStatus(AgentStatus.VERIFYING);
-      addLog(LogLevel.SUCCESS, "Payload Ready / Injected");
-      
-      // Verification Delay then back to Perception
-      setTimeout(() => {
-        // Here we would ideally compare frames. For now, loop back.
-        setStatus(AgentStatus.PERCEIVING);
-      }, 3000);
-    }, 1500);
+    if (bridgeConnected && bridgeRef.current) {
+        bridgeRef.current.sendScript(analysis.duckyScript);
+        lastActionRef.current = analysis.suggestedAction;
+
+        // Wait for execution (simulated delay, real verification would come from WS feedback)
+        setTimeout(() => {
+          setStatus(AgentStatus.VERIFYING);
+
+          // Verification Delay then back to Perception
+          setTimeout(() => {
+            // Here we would ideally compare frames. For now, loop back.
+            setStatus(AgentStatus.PERCEIVING);
+          }, 3000);
+        }, 1000);
+
+    } else {
+        addLog(LogLevel.ERROR, "Cannot Execute: Bridge Disconnected");
+        setStatus(AgentStatus.ERROR);
+    }
   };
 
   const manualConfirmAction = () => {
@@ -186,6 +212,10 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-1.5 px-2 py-1 rounded border ${bridgeConnected ? 'bg-terminal-green/10 border-terminal-green/30 text-terminal-green' : 'bg-red-900/20 border-red-900/50 text-red-500'}`}>
+               {bridgeConnected ? <Wifi size={14} /> : <WifiOff size={14} />}
+               <span className="text-[10px] font-bold tracking-wider hidden sm:inline">{bridgeConnected ? 'CONNECTED' : 'OFFLINE'}</span>
+            </div>
             <div className="hidden md:flex items-center gap-2">
               <span className="text-xs text-gray-500 uppercase font-semibold">Status</span>
               {getStatusBadge()}

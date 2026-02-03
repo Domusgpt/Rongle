@@ -1,6 +1,9 @@
-import time
+import asyncio
+import websockets
+import json
 import sys
 import os
+import logging
 
 # Add current directory to path so imports work
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -8,92 +11,93 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from core.actuator import HygienicActuator
 from core.ledger import ImmutableLedger
 from core.policy_engine import PolicyEngine
-from core.visual_cortex import VisualCortex
 
-def main():
-    print("==============================================")
-    print("   HARDWARE-ISOLATED AGENTIC OPERATOR (HIAO)  ")
-    print("   System Starting...                         ")
-    print("==============================================")
-    
-    # 1. Initialize Modules
-    try:
-        ledger = ImmutableLedger()
-        policy = PolicyEngine()
-        actuator = HygienicActuator()
-        cortex = VisualCortex()
-    except Exception as e:
-        print(f"CRITICAL: Hardware initialization failed: {e}")
-        return
+# Configure Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("HIAO-Server")
 
-    # 2. Self-Calibration
-    print("\n[System] Performing Self-Calibration...")
-    # Move mouse to top-left to reset absolute tracking simulation
-    actuator.execute_ducky_script("MOUSE_MOVE 0,0")
-    time.sleep(1)
-    
-    start_pos = cortex.locate_cursor()
-    ledger.log_action("CALIBRATION", f"Zeroed cursor. Visual confirmation at {start_pos}")
-    print("[System] Calibration Complete.")
+class AgentServer:
+    def __init__(self):
+        self.ledger = ImmutableLedger()
+        self.policy = PolicyEngine()
+        self.actuator = HygienicActuator()
+        logger.info("Agent Modules Initialized")
 
-    # 3. Main Agent Loop
-    goal = "Open Terminal"
-    print(f"\n[System] Mission Start. Goal: {goal}")
-    
-    iteration = 0
-    max_iterations = 5 # Safety limit for demo
-
-    while iteration < max_iterations:
-        iteration += 1
-        print(f"\n--- Cycle {iteration} ---")
+    async def handler(self, websocket):
+        client_info = websocket.remote_address
+        logger.info(f"Client connected: {client_info}")
 
         try:
-            # A. Perception (Look)
-            frame_hash = cortex.capture_frame()
-            target_coords = cortex.identify_element(goal)
-            print(f"[Eye] Found target '{goal}' at {target_coords}")
-            
-            # B. Reasoning / Action Formulation
-            # (In production, an LLM would generate the Ducky Script here)
-            script = f"MOUSE_MOVE {target_coords[0]},{target_coords[1]}"
-            print(f"[Brain] Generated plan: {script}")
-            
-            # C. Policy Check (The Conscience)
-            is_allowed, reason = policy.validate_command(script)
-            
-            if is_allowed:
-                # D. Execution (The Hands)
-                print(f"[Hands] Executing action...")
-                actuator.execute_ducky_script(script)
-                
-                # E. Logging (The Memory)
-                ledger.log_action("EXECUTION", script, frame_hash)
-                
-                # F. Verification
-                # Wait for physical action to complete
-                time.sleep(1.0) 
-                
-                # Check if we are closer to the goal (Mock verification)
-                current_pos = cortex.locate_cursor()
-                # Simple distance check logic would go here
-                print(f"[System] Verification: Cursor now at {current_pos}")
-                
-            else:
-                print(f"[Policy] BLOCKED: {reason}")
-                ledger.log_action("BLOCKED", script, reason)
-                # Simple recovery strategy
-                print("[Brain] Re-planning...")
-                time.sleep(1)
+            async for message in websocket:
+                try:
+                    data = json.loads(message)
+                    command_type = data.get("type")
 
-        except KeyboardInterrupt:
-            print("\n[System] Manual Override. Shutting down.")
-            break
-        except Exception as e:
-            print(f"[Error] Unexpected fault: {e}")
-            ledger.log_action("ERROR", str(e))
-            break
+                    if command_type == "EXECUTE_SCRIPT":
+                        script = data.get("script")
+                        logger.info(f"Received script execution request from {client_info}")
 
-    print("\n[System] Mission Terminated.")
+                        # 1. Validate
+                        is_allowed, reason = self.policy.validate_command(script)
+
+                        if is_allowed:
+                            # 2. Execute
+                            logger.info("Policy Check: APPROVED. Executing...")
+                            # Note: blocking call in async loop - ideally run in executor if heavy
+                            # For simplicity in this embedded context, we run it directly
+                            self.actuator.execute_ducky_script(script)
+
+                            # 3. Log
+                            self.ledger.log_action("EXECUTION", script)
+
+                            await websocket.send(json.dumps({
+                                "type": "EXECUTION_RESULT",
+                                "status": "SUCCESS",
+                                "message": "Script executed successfully"
+                            }))
+                        else:
+                            logger.warning(f"Policy Check: BLOCKED. Reason: {reason}")
+                            self.ledger.log_action("BLOCKED", script, reason)
+
+                            await websocket.send(json.dumps({
+                                "type": "EXECUTION_RESULT",
+                                "status": "BLOCKED",
+                                "message": reason
+                            }))
+
+                    elif command_type == "PING":
+                         await websocket.send(json.dumps({"type": "PONG"}))
+
+                    else:
+                        logger.warning(f"Unknown command type: {command_type}")
+                        await websocket.send(json.dumps({
+                            "type": "ERROR",
+                            "message": "Unknown command type"
+                        }))
+
+                except json.JSONDecodeError:
+                    logger.error("Invalid JSON received")
+                    await websocket.send(json.dumps({"type": "ERROR", "message": "Invalid JSON"}))
+                except Exception as e:
+                    logger.error(f"Error processing message: {e}")
+                    await websocket.send(json.dumps({"type": "ERROR", "message": str(e)}))
+
+        except websockets.exceptions.ConnectionClosed:
+            logger.info(f"Client disconnected: {client_info}")
+
+async def main():
+    server_instance = AgentServer()
+    port = 8000
+    logger.info(f"Starting WebSocket Server on 0.0.0.0:{port}")
+
+    async with websockets.serve(server_instance.handler, "0.0.0.0", port):
+        await asyncio.Future()  # run forever
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user")
