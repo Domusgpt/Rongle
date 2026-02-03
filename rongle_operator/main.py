@@ -33,7 +33,7 @@ from .config.settings import Settings
 from .hygienic_actuator import DuckyScriptParser, EmergencyStop, HIDGadget, Humanizer
 from .immutable_ledger import AuditLogger
 from .policy_engine import PolicyGuardian, PolicyVerdict
-from .visual_cortex import FrameGrabber, ReflexTracker, VLMReasoner
+from .visual_cortex import FrameGrabber, ReflexTracker, VLMReasoner, FastDetector
 from .visual_cortex.vlm_reasoner import GeminiBackend, LocalVLMBackend
 
 logger = logging.getLogger("operator")
@@ -166,6 +166,7 @@ def agent_loop(
     guardian: PolicyGuardian,
     audit: AuditLogger,
     estop: EmergencyStop,
+    detector: FastDetector,
     max_iterations: int = 100,
     confidence_threshold: float = 0.5,
 ) -> None:
@@ -227,21 +228,40 @@ def agent_loop(
         if previous_action:
             prompt = f"{goal} (previous action: {previous_action})"
 
-        # Foveated Rendering Logic (Stub)
-        # In a full implementation, we would:
-        # 1. Run low-latency MobileNet-SSD to find 'interactive' regions
-        # 2. Crop the frame around these regions
-        # 3. Send the crop to the VLM
-        # For now, we perform a standard full-frame query but structure the call site for foveation.
+        # Foveated Rendering Logic
+        # 1. Run low-latency detection to find 'interactive' regions
+        cnn_regions = detector.detect(frame.image)
 
-        # cnn_regions = cnn_detect(frame.image) # Future
-        # if cnn_regions:
-        #     crop = extract_crop(frame.image, cnn_regions[0])
-        #     element = reasoner.find_element(crop, prompt)
-        #     element.x += crop.offset_x
-        #     element.y += crop.offset_y
-        # else:
-        element = reasoner.find_element(frame.image, prompt)
+        element = None
+        if cnn_regions:
+            # 2. Crop the frame around these regions
+            foveal_data = detector.get_foveal_crop(frame.image, cnn_regions)
+
+            if foveal_data:
+                crop, offset_x, offset_y = foveal_data
+                logger.info(f"Foveated Rendering: using crop {crop.shape} offset ({offset_x},{offset_y})")
+
+                # 3. Send the crop to the VLM
+                element = reasoner.find_element(crop, prompt)
+
+                # 4. Translate coordinates back to full screen
+                if element:
+                    element.x += offset_x
+                    element.y += offset_y
+                    logger.info(f"Foveated: Mapped local ({element.x-offset_x},{element.y-offset_y}) to global ({element.x},{element.y})")
+
+        # Fallback to full frame if no regions found or VLM failed on crop
+        # This also acts as a "Calibration" step: if the CNN misses the target (crop fails),
+        # the VLM sees the whole screen and can find it, implicitly correcting the CNN's blind spot.
+        if element is None:
+            if cnn_regions:
+                logger.info("Foveated approach yielded no target; falling back to full frame (Calibration).")
+            element = reasoner.find_element(frame.image, prompt)
+
+            # Future improvement: Feed this successful VLM detection back to the CNN
+            # to update its belief state or online learning model.
+            if element:
+                 logger.info(f"VLM Calibrated CNN: Target found at ({element.x},{element.y}) despite CNN miss.")
         if element is None:
             logger.info("No actionable element found — goal may be complete")
             audit.log("GOAL_COMPLETE", action_detail="VLM found no more targets")
@@ -472,6 +492,7 @@ def main() -> None:
     tracker = ReflexTracker(
         cursor_templates_dir=settings.cursor_templates_dir,
     )
+    detector = FastDetector()  # Initialize fast detector (stub or model)
     guardian = PolicyGuardian(
         allowlist_path=settings.allowlist_path,
     )
@@ -538,6 +559,7 @@ def main() -> None:
                 guardian=guardian,
                 audit=audit,
                 estop=estop,
+                detector=detector,
             )
 
     except Exception as exc:
