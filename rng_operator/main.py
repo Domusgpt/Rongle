@@ -183,7 +183,7 @@ def agent_loop(
     audit.log("AGENT_START", action_detail=f"Goal: {goal}")
 
     state = AgentState.PERCEIVING
-    previous_action = ""
+    action_history: list[str] = []
     retry_count = 0
     max_retries = 3
 
@@ -221,56 +221,35 @@ def agent_loop(
         cursor_y = cursor.y if cursor else int(parser._cursor_y)
 
         # ========================================
-        # STEP 2: DETECT — VLM identifies next target
+        # STEP 2: PLAN — VLM Generates Ducky Script
         # ========================================
         state = AgentState.PLANNING
-        prompt = goal
-        if previous_action:
-            prompt = f"{goal} (previous action: {previous_action})"
 
-        element = reasoner.find_element(frame.image, prompt)
-        if element is None:
-            logger.info("No actionable element found — goal may be complete")
-            audit.log("GOAL_COMPLETE", action_detail="VLM found no more targets")
+        ducky_script = reasoner.plan_action(frame.image, goal, action_history)
+
+        if not ducky_script or "GOAL_COMPLETE" in ducky_script:
+            logger.info("Planner returned empty or complete signal.")
+            audit.log("GOAL_COMPLETE", action_detail="VLM finished task")
             break
 
-        logger.info(
-            "Target: '%s' at (%d, %d) %dx%d conf=%.2f",
-            element.label, element.x, element.y,
-            element.width, element.height, element.confidence,
-        )
-
-        if element.confidence < confidence_threshold:
-            logger.warning("Confidence %.2f below threshold %.2f — skipping",
-                         element.confidence, confidence_threshold)
-            retry_count += 1
-            if retry_count >= max_retries:
-                logger.error("Max retries reached — stopping")
-                audit.log("MAX_RETRIES", action_detail="Confidence too low after retries")
-                break
-            continue
-
-        retry_count = 0
-
-        # ========================================
-        # STEP 3: ACT — Generate and execute Ducky Script
-        # ========================================
-        state = AgentState.ACTING
-
-        # Build Ducky Script to click the target element center
-        target_cx, target_cy = element.center
-        ducky_script = f"MOUSE_MOVE {target_cx} {target_cy}\nMOUSE_CLICK LEFT"
+        logger.info("Generated Plan:\n%s", ducky_script)
 
         audit.log(
             "PLAN",
             screenshot_hash=frame.sha256,
-            action_detail=f"Target '{element.label}' → script: {ducky_script!r}",
+            action_detail=f"Script: {ducky_script!r}",
         )
+
+        # ========================================
+        # STEP 3: ACT — Execute Ducky Script
+        # ========================================
+        state = AgentState.ACTING
 
         # Parse into commands
         commands = parser.parse(ducky_script)
 
         # Execute each command through the policy gate
+        executed_script_segment = []
         for cmd in commands:
             if estop.is_stopped:
                 hid.release_all()
@@ -295,13 +274,21 @@ def agent_loop(
 
             # Execute via HID
             hid.execute(cmd)
+            executed_script_segment.append(cmd.raw_line)
             audit.log(
                 "EXECUTE",
                 action_detail=f"Executed: {cmd.raw_line}",
                 policy_verdict="allowed",
             )
 
-        previous_action = f"Clicked '{element.label}' at ({target_cx}, {target_cy})"
+            # Handle WAIT_FOR_IMAGE (Visual Reactive Command)
+            if cmd.kind == "wait_for_image":
+                logger.info("Waiting for image: %s", cmd.string_chars)
+                # TODO: Implement loop waiting for VLM confirmation or CNN detection
+                time.sleep(1.0) # Stub
+
+        if executed_script_segment:
+            action_history.append("; ".join(executed_script_segment))
 
         # ========================================
         # STEP 4: VERIFY — Check result
@@ -315,15 +302,6 @@ def agent_loop(
             screenshot_hash=verify_frame.sha256,
             action_detail=f"Post-action frame #{verify_frame.sequence}",
         )
-
-        # Check if cursor moved to expected position
-        verify_cursor = tracker.detect(verify_frame.image)
-        if verify_cursor:
-            dist = ((verify_cursor.x - target_cx) ** 2 + (verify_cursor.y - target_cy) ** 2) ** 0.5
-            if dist < 30:
-                logger.info("Verification PASSED: cursor near target (dist=%.1f)", dist)
-            else:
-                logger.warning("Verification WARN: cursor drift %.1f px from target", dist)
 
         # Brief pause before next iteration
         time.sleep(0.2)

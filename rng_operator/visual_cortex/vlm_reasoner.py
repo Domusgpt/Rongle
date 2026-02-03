@@ -64,6 +64,11 @@ class VLMBackend(ABC):
         """Send a frame + prompt and return structured UI element data."""
         ...
 
+    @abstractmethod
+    def generate_plan(self, frame: np.ndarray, goal: str, history: list[str]) -> str:
+        """Generate a Ducky Script plan to achieve the goal given the frame."""
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Backend: Google Gemini API
@@ -129,6 +134,48 @@ class GeminiBackend(VLMBackend):
             raw_response=raw_text,
             latency_ms=latency,
         )
+
+    def generate_plan(self, frame: np.ndarray, goal: str, history: list[str]) -> str:
+        self._ensure_client()
+        from google.genai import types  # type: ignore[import-untyped]
+
+        # Encode frame to JPEG
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if not ok:
+            raise RuntimeError("Failed to encode frame for VLM")
+
+        image_data = base64.b64encode(buf.tobytes()).decode("utf-8")
+
+        history_text = "\n".join([f"- {h}" for h in history[-5:]])
+        system_prompt = (
+            "You are an AI agent controlling a computer. "
+            "Your output must be strict Ducky Script commands to achieve the user's goal based on the screenshot.\n"
+            "Supported commands:\n"
+            "- MOUSE_MOVE x y\n"
+            "- MOUSE_CLICK LEFT|RIGHT|MIDDLE\n"
+            "- STRING text\n"
+            "- ENTER, TAB, ESCAPE, DELAY ms\n"
+            "- WAIT_FOR_IMAGE description_token\n"
+            "Do not output markdown code blocks. Just the raw commands."
+        )
+
+        user_prompt = f"Goal: {goal}\nRecent History:\n{history_text}\n"
+
+        response = self._client.models.generate_content(
+            model=self.model,
+            contents=[
+                types.Content(parts=[
+                    types.Part(text=system_prompt),
+                    types.Part(inline_data=types.Blob(
+                        mime_type="image/jpeg",
+                        data=base64.b64decode(image_data),
+                    )),
+                    types.Part(text=user_prompt),
+                ]),
+            ],
+        )
+
+        return response.text.strip() if response.text else ""
 
     @staticmethod
     def _parse_elements(raw: str) -> list[UIElement]:
@@ -229,6 +276,12 @@ class LocalVLMBackend(VLMBackend):
             latency_ms=latency,
         )
 
+    def generate_plan(self, frame: np.ndarray, goal: str, history: list[str]) -> str:
+        # Fallback for local model: just try to click the center if simple query
+        # This is a stub implementation as smaller models struggle with full Ducky Script generation
+        logger.warning("LocalVLM plan generation is experimental/stubbed.")
+        return "REM LocalVLM plan generation not fully implemented"
+
 
 # ---------------------------------------------------------------------------
 # Composite Reasoner
@@ -298,3 +351,20 @@ class VLMReasoner:
         """Get a natural-language description of the current screen state."""
         response = self.backend.query(frame, "Describe what is shown on this screen.")
         return response.description
+
+    def plan_action(
+        self,
+        frame: np.ndarray,
+        goal: str,
+        history: list[str],
+        require_privacy: bool = False
+    ) -> str:
+        """Generate a Ducky Script action plan."""
+        backend = self.backend
+        if require_privacy:
+            if self.local_backend:
+                backend = self.local_backend
+            else:
+                logger.warning("Privacy required but no local backend configured. Falling back to primary.")
+
+        return backend.generate_plan(frame, goal, history)
