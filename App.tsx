@@ -1,17 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React from 'react';
 import { HardwareStatus } from './components/HardwareStatus';
 import { LiveView } from './components/LiveView';
 import { ActionLog } from './components/ActionLog';
-import { 
-  AgentStatus, 
-  HardwareState, 
-  LogEntry, 
-  LogLevel, 
-  AgentConfig, 
-  VisionAnalysisResult 
-} from './types';
-import { analyzeScreenFrame } from './services/gemini';
-import { AgentBridge } from './services/bridge';
+import { AgentStatus, LogLevel } from './types';
+import { useAgent } from './hooks/useAgent';
 import { 
   Power, 
   Play, 
@@ -27,151 +19,20 @@ import {
   WifiOff
 } from 'lucide-react';
 
-const INITIAL_HARDWARE_STATE: HardwareState = {
-  hdmiSignal: true,
-  hidConnected: true,
-  latencyMs: 120,
-  fps: 30
-};
-
-const INITIAL_CONFIG: AgentConfig = {
-  autoMode: false,
-  humanInTheLoop: true,
-  confidenceThreshold: 0.7,
-  maxRetries: 3,
-  pollIntervalMs: 3000
-};
-
 export default function App() {
-  // State
-  const [status, setStatus] = useState<AgentStatus>(AgentStatus.IDLE);
-  const [hardware, setHardware] = useState<HardwareState>(INITIAL_HARDWARE_STATE);
-  const [config, setConfig] = useState<AgentConfig>(INITIAL_CONFIG);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [goal, setGoal] = useState<string>("Open the calculator app");
-  const [currentAnalysis, setCurrentAnalysis] = useState<VisionAnalysisResult | null>(null);
-  const [bridgeConnected, setBridgeConnected] = useState<boolean>(false);
-  
-  // Refs for loop control
-  const loopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastActionRef = useRef<string | undefined>(undefined);
-  const bridgeRef = useRef<AgentBridge | null>(null);
-
-  // Helper to add logs
-  const addLog = useCallback((level: LogLevel, message: string, metadata?: any) => {
-    setLogs(prev => [...prev, {
-      id: Math.random().toString(36).substr(2, 9),
-      timestamp: new Date(),
-      level,
-      message,
-      metadata
-    }]);
-  }, []);
-
-  // Initialize Bridge
-  useEffect(() => {
-    bridgeRef.current = new AgentBridge(
-      "ws://localhost:8000",
-      addLog,
-      setBridgeConnected
-    );
-    bridgeRef.current.connect();
-
-    return () => {
-      bridgeRef.current?.disconnect();
-    };
-  }, [addLog]);
-
-  // Emergency Stop
-  const handleEmergencyStop = useCallback(() => {
-    setStatus(AgentStatus.STOPPED);
-    if (loopTimerRef.current) clearTimeout(loopTimerRef.current);
-    addLog(LogLevel.ERROR, "EMERGENCY STOP TRIGGERED BY USER");
-  }, [addLog]);
-
-  // Start Agent
-  const handleStart = () => {
-    if (status === AgentStatus.IDLE || status === AgentStatus.STOPPED) {
-      addLog(LogLevel.INFO, "Agent Initialized", { goal });
-      setStatus(AgentStatus.PERCEIVING);
-    }
-  };
-
-  // The Core Loop: Perceive -> Plan -> Act -> Verify
-  const handleFrameCapture = useCallback(async (base64Image: string) => {
-    if (status !== AgentStatus.PERCEIVING) return;
-
-    // 1. Perception & Planning (Gemini)
-    try {
-      addLog(LogLevel.INFO, "Analyzing visual input...");
-      
-      const analysis = await analyzeScreenFrame(base64Image, goal, lastActionRef.current);
-      setCurrentAnalysis(analysis);
-      
-      addLog(LogLevel.INFO, "Analysis Complete", { 
-        confidence: analysis.confidence, 
-        suggestion: analysis.suggestedAction 
-      });
-
-      if (analysis.confidence < config.confidenceThreshold) {
-        addLog(LogLevel.WARNING, `Confidence too low (${analysis.confidence}). Pausing for safety.`);
-        setStatus(AgentStatus.IDLE);
-        return;
-      }
-
-      setStatus(AgentStatus.PLANNING);
-
-      // Simulate a small delay for "Thinking"
-      setTimeout(() => {
-        if (config.humanInTheLoop) {
-          if (config.autoMode) {
-             proceedToAct(analysis);
-          } else {
-             addLog(LogLevel.WARNING, "Waiting for human confirmation...");
-          }
-        } else {
-          proceedToAct(analysis);
-        }
-      }, 1000);
-
-    } catch (error) {
-      addLog(LogLevel.ERROR, "Perception Failure", error);
-      setStatus(AgentStatus.ERROR);
-    }
-  }, [status, goal, config, addLog]);
-
-
-  const proceedToAct = (analysis: VisionAnalysisResult) => {
-    setStatus(AgentStatus.ACTING);
-    addLog(LogLevel.ACTION, `Transmitting Payload...`);
-    
-    if (bridgeConnected && bridgeRef.current) {
-        bridgeRef.current.sendScript(analysis.duckyScript);
-        lastActionRef.current = analysis.suggestedAction;
-
-        // Wait for execution (simulated delay, real verification would come from WS feedback)
-        setTimeout(() => {
-          setStatus(AgentStatus.VERIFYING);
-
-          // Verification Delay then back to Perception
-          setTimeout(() => {
-            // Here we would ideally compare frames. For now, loop back.
-            setStatus(AgentStatus.PERCEIVING);
-          }, 3000);
-        }, 1000);
-
-    } else {
-        addLog(LogLevel.ERROR, "Cannot Execute: Bridge Disconnected");
-        setStatus(AgentStatus.ERROR);
-    }
-  };
-
-  const manualConfirmAction = () => {
-    if (status === AgentStatus.PLANNING && currentAnalysis) {
-      addLog(LogLevel.INFO, "Action confirmed by operator.");
-      proceedToAct(currentAnalysis);
-    }
-  };
+  const {
+    status, setStatus,
+    hardware,
+    config, setConfig,
+    logs, addLog,
+    goal, setGoal,
+    currentAnalysis,
+    bridgeConnected,
+    handleStart,
+    handleEmergencyStop,
+    handleFrameCapture,
+    manualConfirmAction
+  } = useAgent();
 
   const copyToClipboard = () => {
     if (currentAnalysis?.duckyScript) {
