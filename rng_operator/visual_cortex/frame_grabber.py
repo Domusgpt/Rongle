@@ -87,10 +87,19 @@ class FrameGrabber:
     # ------------------------------------------------------------------
     def open(self) -> None:
         """Open the capture device."""
-        self._cap = cv2.VideoCapture(self.device, cv2.CAP_V4L2)
+        # Determine backend: V4L2 for local devices, FFMPEG/Any for network streams
+        backend = cv2.CAP_ANY
+        if isinstance(self.device, str):
+            if self.device.startswith("/dev/"):
+                backend = cv2.CAP_V4L2
+            elif "://" in self.device:
+                backend = cv2.CAP_FFMPEG
+
+        self._cap = cv2.VideoCapture(self.device, backend)
         if not self._cap.isOpened():
             raise RuntimeError(f"Cannot open video device: {self.device}")
 
+        # Setting properties might fail on some network streams, but we try anyway
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         self._cap.set(cv2.CAP_PROP_FPS, self.fps)
