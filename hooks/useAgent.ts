@@ -31,6 +31,7 @@ export const useAgent = () => {
   const [config, setConfig] = useState<AgentConfig>(INITIAL_CONFIG);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [goal, setGoal] = useState<string>("Open the calculator app");
+  const [bridgeUrl, setBridgeUrl] = useState<string>("ws://localhost:8000");
   const [currentAnalysis, setCurrentAnalysis] = useState<VisionAnalysisResult | null>(null);
   const [bridgeConnected, setBridgeConnected] = useState<boolean>(false);
 
@@ -50,7 +51,7 @@ export const useAgent = () => {
 
   useEffect(() => {
     bridgeRef.current = new AgentBridge(
-      "ws://localhost:8000",
+      bridgeUrl,
       addLog,
       setBridgeConnected
     );
@@ -59,7 +60,7 @@ export const useAgent = () => {
     return () => {
       bridgeRef.current?.disconnect();
     };
-  }, [addLog]);
+  }, [addLog, bridgeUrl]);
 
   const handleEmergencyStop = useCallback(() => {
     setStatus(AgentStatus.STOPPED);
@@ -147,6 +148,7 @@ export const useAgent = () => {
     config, setConfig,
     logs, addLog,
     goal, setGoal,
+    bridgeUrl, setBridgeUrl,
     currentAnalysis,
     bridgeConnected,
     handleStart,

@@ -26,6 +26,7 @@ export default function App() {
     config, setConfig,
     logs, addLog,
     goal, setGoal,
+    bridgeUrl, setBridgeUrl,
     currentAnalysis,
     bridgeConnected,
     handleStart,
@@ -298,6 +299,15 @@ export default function App() {
                        <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${config.autoMode ? 'left-6' : 'left-1'}`}></div>
                     </div>
                  </label>
+                 <div className="p-2 rounded bg-industrial-900/50 border border-transparent hover:border-industrial-600 transition-colors">
+                    <span className="text-sm text-gray-400 block mb-1">Bridge URL</span>
+                    <input
+                      type="text"
+                      value={bridgeUrl}
+                      onChange={(e) => setBridgeUrl(e.target.value)}
+                      className="w-full bg-black border border-industrial-600 rounded px-2 py-1 text-xs font-mono text-terminal-green focus:outline-none focus:border-terminal-green"
+                    />
+                 </div>
               </div>
             </div>
 

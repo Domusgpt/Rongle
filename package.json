@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
-    "test:backend": "pytest embedded_agent/tests"
+    "test:backend": "pytest embedded_agent/tests",
+    "test:e2e": "pytest tests/e2e/test_bridge_integration.py"
   },
   "dependencies": {
     "@google/genai": "^1.39.0",

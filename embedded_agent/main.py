@@ -46,9 +46,8 @@ class AgentServer:
                         if is_allowed:
                             # 2. Execute
                             logger.info("Policy Check: APPROVED. Executing...")
-                            # Note: blocking call in async loop - ideally run in executor if heavy
-                            # For simplicity in this embedded context, we run it directly
-                            self.actuator.execute_ducky_script(script)
+                            # Run in executor to avoid blocking the event loop
+                            await asyncio.to_thread(self.actuator.execute_ducky_script, script)
 
                             # 3. Log
                             self.ledger.log_action("EXECUTION", script)
