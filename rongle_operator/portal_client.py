@@ -16,6 +16,8 @@ import logging
 import time
 from typing import Any
 
+from .auth_manager import AuthManager
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,7 +48,7 @@ class PortalClient:
     ) -> None:
         self.portal_url = portal_url.rstrip("/")
         self.device_id = device_id
-        self.api_key = api_key
+        self.auth = AuthManager(device_id, api_key)
         self.connect_timeout = connect_timeout
         self.request_timeout = request_timeout
         self._http = None
@@ -67,20 +69,36 @@ class PortalClient:
             self._http = httpx.AsyncClient(
                 base_url=self.portal_url,
                 timeout=self.request_timeout,
-                headers={"X-Device-Key": self.api_key},
+                headers=self.auth.get_headers(),
             )
 
-    async def _get(self, path: str) -> dict:
+    async def _request(self, method: str, path: str, **kwargs) -> dict:
+        """Wrapper for HTTP requests with 401 handling."""
         await self._ensure_http()
-        resp = await self._http.get(path)
-        resp.raise_for_status()
-        return resp.json()
+        import httpx
+
+        try:
+            resp = await self._http.request(method, path, **kwargs)
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                logger.warning("401 Unauthorized encountered.")
+                if await self.auth.handle_401():
+                    # Retry once if auth refreshed
+                    # Update headers on existing client or recreate?
+                    # Simpler to update headers map in place if supported, or recreate client.
+                    self._http.headers.update(self.auth.get_headers())
+                    resp = await self._http.request(method, path, **kwargs)
+                    resp.raise_for_status()
+                    return resp.json()
+            raise
+
+    async def _get(self, path: str) -> dict:
+        return await self._request("GET", path)
 
     async def _post(self, path: str, data: dict) -> dict:
-        await self._ensure_http()
-        resp = await self._http.post(path, json=data)
-        resp.raise_for_status()
-        return resp.json()
+        return await self._request("POST", path, json=data)
 
     # ------------------------------------------------------------------
     # Settings & Policy
@@ -148,7 +166,7 @@ class PortalClient:
 
         try:
             await self._post("/api/audit/sync", {
-                "device_api_key": self.api_key,
+                "device_api_key": self.auth.config.api_key,
                 "entries": chunk,
             })
             self._last_flush = time.time()
@@ -163,7 +181,7 @@ class PortalClient:
     async def sync_audit(self, entries: list[dict]) -> dict:
         """Direct upload (legacy compatibility)."""
         return await self._post("/api/audit/sync", {
-            "device_api_key": self.api_key,
+            "device_api_key": self.auth.config.api_key,
             "entries": entries,
         })
 
@@ -176,7 +194,7 @@ class PortalClient:
             import websockets
             ws_url = self.portal_url.replace("http", "ws")
             self._ws = await websockets.connect(
-                f"{ws_url}/ws/device/{self.device_id}?key={self.api_key}",
+                f"{ws_url}/ws/device/{self.device_id}?key={self.auth.config.api_key}",
                 open_timeout=self.connect_timeout,
             )
             logger.info("WebSocket telemetry connected")

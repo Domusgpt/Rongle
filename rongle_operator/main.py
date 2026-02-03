@@ -417,12 +417,18 @@ def agent_loop(
 
             else:
                 # Standard HID command
-                hid.execute(cmd)
-                audit.log(
-                    "EXECUTE",
-                    action_detail=f"Executed: {cmd.raw_line}",
-                    policy_verdict="allowed",
-                )
+                try:
+                    hid.execute(cmd)
+                    audit.log(
+                        "EXECUTE",
+                        action_detail=f"Executed: {cmd.raw_line}",
+                        policy_verdict="allowed",
+                    )
+                except Exception as e:
+                    logger.error(f"HID Execution Failed: {e}")
+                    audit.log("HARDWARE_FAULT", action_detail=f"HID Write Failed: {e}")
+                    # Abort current action sequence to prevent desync
+                    break
 
         previous_action = f"Clicked '{element.label}' at ({target_cx}, {target_cy})"
         current_session.context_history.append(previous_action)
