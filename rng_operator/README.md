@@ -5,7 +5,7 @@ Python daemon that runs on a Raspberry Pi Zero 2 W (or any Linux host with USB O
 ## Module Map
 
 ```
-operator/
+rng_operator/
 ├── main.py                       # Entrypoint: calibrate → agent loop
 ├── config/
 │   ├── settings.py               # Settings dataclass with JSON persistence
@@ -16,13 +16,18 @@ operator/
 │   ├── hid_gadget.py             # /dev/hidgX USB OTG writer
 │   └── emergency_stop.py         # GPIO kill switch
 ├── visual_cortex/
-│   ├── frame_grabber.py          # V4L2 frame capture
+│   ├── frame_grabber.py          # V4L2/Network frame capture
 │   ├── reflex_tracker.py         # Template/YOLO cursor detection
 │   └── vlm_reasoner.py           # Gemini / local VLM interface
 ├── policy_engine/
 │   └── guardian.py               # Allowlist enforcement + rate limiter
 ├── immutable_ledger/
 │   └── audit_logger.py           # Merkle chain audit log
+├── training/                     # CNN Training Harness
+│   ├── dataset.py
+│   ├── model.py
+│   ├── train.py
+│   └── export.py
 ├── portal_client.py              # Async portal HTTP+WS client
 └── requirements.txt
 ```
@@ -31,16 +36,16 @@ operator/
 
 ```bash
 # Install dependencies
-pip install -r operator/requirements.txt
+pip install -r rng_operator/requirements.txt
 
 # Run with a goal
-GEMINI_API_KEY=<key> python -m operator.main --goal "Open Notepad"
+GEMINI_API_KEY=<key> python -m rng_operator.main --goal "Open Notepad"
 
 # Interactive mode
-python -m operator.main
+python -m rng_operator.main
 
 # Development (no real HID output, no GPIO)
-python -m operator.main --dry-run --software-estop
+python -m rng_operator.main --dry-run --software-estop
 ```
 
 ### CLI Arguments
@@ -48,9 +53,36 @@ python -m operator.main --dry-run --software-estop
 | Flag | Description |
 |------|-------------|
 | `--goal TEXT` | Agent goal string. Prompts interactively if omitted. |
-| `--config PATH` | Path to settings JSON (default: `operator/config/settings.json`) |
+| `--config PATH` | Path to settings JSON (default: `rng_operator/config/settings.json`) |
 | `--dry-run` | Disable actual HID writes (log only) |
 | `--software-estop` | Use software kill switch instead of GPIO |
+
+## Key Features
+
+### Android Camera Support
+
+The `FrameGrabber` now supports Android devices running IP Webcam apps (or similar MJPEG/RTSP streams).
+Simply set `video_device` in your configuration to the stream URL (e.g., `http://192.168.1.101:8080/video`). The backend automatically switches to `FFMPEG` capture mode.
+
+### Dynamic Ducky Script (VLM Planning)
+
+The agent now uses "Generative Ducky Script". Instead of hardcoded logic, the VLM (e.g., Gemini 2.0 Flash) analyzes the screen and goal to generate a sequence of Ducky Script commands.
+
+Supported commands include:
+- `MOUSE_MOVE x y`
+- `MOUSE_CLICK LEFT`
+- `STRING text`
+- `WAIT_FOR_IMAGE description` (Visual Reactive)
+
+### CNN Training Harness
+
+Located in `rng_operator/training/`, this module allows training local MobileNetV3-SSD models for ultra-fast UI element detection on edge devices.
+
+**Workflow:**
+1. Collect data (images + labels).
+2. Train: `python -m rng_operator.training.train --data-dir ./my_dataset`
+3. Export to ONNX: `python -m rng_operator.training.export --checkpoint checkpoints/model_epoch_9.pth`
+4. Load into `ReflexTracker` or `FastDetector`.
 
 ## Module Reference
 
@@ -62,7 +94,7 @@ Orchestrates the full lifecycle:
 
 2. **`agent_loop(goal, ...)`** — Core perception-action loop:
    - LOOK: `grabber.grab()` → `CapturedFrame`
-   - DETECT: `tracker.detect()` for cursor + `reasoner.find_element()` for UI target
+   - PLAN: `reasoner.plan_action()` → Generates Ducky Script based on visual state & history.
    - ACT: `parser.parse()` → `guardian.check_command()` → `hid.execute()`
    - VERIFY: Re-capture, check cursor distance from target (<30px = pass)
    - Emergency stop checked every iteration
@@ -85,6 +117,7 @@ commands = parser.parse("GUI r\nDELAY 500\nSTRING notepad\nENTER")
 - `MOUSE_CLICK [LEFT|RIGHT|MIDDLE]` — Click
 - `REPEAT <n>` — Repeat last command
 - `REM <comment>` — Ignored
+- `WAIT_FOR_IMAGE <token>` — Pause execution until visual confirmation
 - Modifier combos: `CTRL ALT DELETE`, `GUI r`, `SHIFT TAB`, etc.
 
 **HID Reports:**
@@ -146,6 +179,8 @@ estop.stop()         # Clean shutdown
 
 ```python
 grabber = FrameGrabber(device="/dev/video0", width=1920, height=1080, fps=30)
+# Or network stream
+grabber = FrameGrabber(device="http://192.168.1.5:8080/video")
 grabber.open()
 frame = grabber.grab()  # CapturedFrame(image, timestamp, sequence, sha256)
 ```
@@ -175,8 +210,8 @@ backend = GeminiBackend(api_key="...", model="gemini-2.0-flash")
 backend = LocalVLMBackend(model_id="HuggingFaceTB/SmolVLM-256M-Instruct")
 
 reasoner = VLMReasoner(backend=backend)
-element = reasoner.find_element(image, "Click the search button")
-# UIElement(label="Search", x=450, y=120, width=100, height=35, confidence=0.85)
+# Generate plan
+script = reasoner.plan_action(image, "Click Search", history=["MOUSE_MOVE..."])
 ```
 
 ### `policy_engine/guardian.py`
@@ -184,7 +219,7 @@ element = reasoner.find_element(image, "Click the search button")
 **`PolicyGuardian`** — Command validation against configurable rules.
 
 ```python
-guardian = PolicyGuardian(allowlist_path="operator/config/allowlist.json")
+guardian = PolicyGuardian(allowlist_path="rng_operator/config/allowlist.json")
 verdict = guardian.check_command("STRING rm -rf /", cursor_x=500, cursor_y=300)
 # PolicyVerdict(allowed=False, reason="Blocked pattern: rm\\s+-rf", rule_name="blocked_keystroke")
 ```
