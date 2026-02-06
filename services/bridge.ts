@@ -5,15 +5,18 @@ type LogCallback = (level: LogLevel, message: string, metadata?: any) => void;
 export class AgentBridge {
   private ws: WebSocket | null = null;
   private url: string;
+  private token: string;
   private onLog: LogCallback;
   private onConnectionChange: (connected: boolean) => void;
 
   constructor(
     url: string,
+    token: string,
     onLog: LogCallback,
     onConnectionChange: (connected: boolean) => void
   ) {
     this.url = url;
+    this.token = token;
     this.onLog = onLog;
     this.onConnectionChange = onConnectionChange;
   }
@@ -24,8 +27,11 @@ export class AgentBridge {
       this.ws = new WebSocket(this.url);
 
       this.ws.onopen = () => {
-        this.onLog(LogLevel.SUCCESS, "Connected to Actuator Bridge");
-        this.onConnectionChange(true);
+        this.onLog(LogLevel.SUCCESS, "Connected to Actuator Bridge. Authenticating...");
+        this.ws?.send(JSON.stringify({
+          type: "AUTH",
+          token: this.token
+        }));
       };
 
       this.ws.onclose = () => {
@@ -42,7 +48,16 @@ export class AgentBridge {
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === "EXECUTION_RESULT") {
+          if (data.type === "AUTH_RESULT") {
+             if (data.status === "SUCCESS") {
+                this.onLog(LogLevel.SUCCESS, "Actuator: Authentication Successful");
+                this.onConnectionChange(true);
+             } else {
+                this.onLog(LogLevel.ERROR, "Actuator: Authentication Failed");
+                this.onConnectionChange(false);
+                this.ws?.close();
+             }
+          } else if (data.type === "EXECUTION_RESULT") {
              if (data.status === "SUCCESS") {
                 this.onLog(LogLevel.SUCCESS, "Actuator: Execution Complete", data);
              } else {

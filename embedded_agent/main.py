@@ -24,11 +24,13 @@ class AgentServer:
         self.ledger = ImmutableLedger()
         self.policy = PolicyEngine()
         self.actuator = HygienicActuator()
-        logger.info("Agent Modules Initialized")
+        self.auth_token = os.environ.get("AGENT_TOKEN", "default-insecure-token")
+        logger.info(f"Agent Modules Initialized. Auth Token Configured: {'***' if self.auth_token != 'default-insecure-token' else 'WARNING: USING DEFAULT TOKEN'}")
 
     async def handler(self, websocket):
         client_info = websocket.remote_address
         logger.info(f"Client connected: {client_info}")
+        authenticated = False
 
         try:
             async for message in websocket:
@@ -36,7 +38,26 @@ class AgentServer:
                     data = json.loads(message)
                     command_type = data.get("type")
 
-                    if command_type == "EXECUTE_SCRIPT":
+                    if command_type == "AUTH":
+                        token = data.get("token")
+                        if token == self.auth_token:
+                            authenticated = True
+                            logger.info(f"Client authenticated: {client_info}")
+                            await websocket.send(json.dumps({"type": "AUTH_RESULT", "status": "SUCCESS"}))
+                        else:
+                            logger.warning(f"Auth failed for client: {client_info}")
+                            await websocket.send(json.dumps({"type": "AUTH_RESULT", "status": "FAILED"}))
+                            return # Close connection on auth fail? Or just ignore commands?
+
+                    elif command_type == "EXECUTE_SCRIPT":
+                        if not authenticated:
+                            logger.warning(f"Unauthenticated execution attempt from {client_info}")
+                            await websocket.send(json.dumps({
+                                "type": "ERROR",
+                                "message": "Authentication Required"
+                            }))
+                            continue
+
                         script = data.get("script")
                         logger.info(f"Received script execution request from {client_info}")
 

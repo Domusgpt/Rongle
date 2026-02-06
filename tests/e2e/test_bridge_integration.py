@@ -33,6 +33,16 @@ async def test_bridge_execution(agent_server):
     uri = "ws://localhost:8000"
 
     async with websockets.connect(uri) as websocket:
+        # Test AUTH (using default insecure token)
+        await websocket.send(json.dumps({
+            "type": "AUTH",
+            "token": "default-insecure-token"
+        }))
+        response = await websocket.recv()
+        data = json.loads(response)
+        assert data["type"] == "AUTH_RESULT"
+        assert data["status"] == "SUCCESS"
+
         # Test PING
         await websocket.send(json.dumps({"type": "PING"}))
         response = await websocket.recv()
