@@ -43,6 +43,7 @@ The following strategic optimizations have been implemented to move Rongle from 
 ### 2. Security Hardening
 *   **Advanced Policy**: The Policy Engine now supports `TimeWindowRule`, `SequenceRule`, and `semantic_safety_check` to prevent unauthorized or dangerous actions.
 *   **Strict Audit**: The Audit Logger strictly adheres to the Merkle Hash Chain specification for tamper-evidence.
+*   **Portal Proxy**: Direct API key access in the frontend is deprecated. All traffic is routed through the Portal for centralized authentication and billing.
 
 ### 3. Actuation Refinement
 *   **Visual Servoing**: A closed-loop control system (`servoing.py`) now guides mouse clicks to their targets, correcting for drift or acceleration issues in real-time.
@@ -55,6 +56,12 @@ The following strategic optimizations have been implemented to move Rongle from 
 *   **Frontend**: Integrated `vitest` and `@testing-library/react` for component and service testing.
 *   **Backend**: Added `pytest` suite for the `rongle_operator` to verify actuator and parser logic.
 *   **Integration**: The `android/hardware_bridge.py` serves as an integration test harness for non-Linux hardware.
+
+### 6. Architectural Decisions (Addressing Review Feedback)
+*   **Communication Bridge**: Previous reviews suggested a direct Frontend<->Backend bridge (Bluetooth/WS). We explicitly chose a **Portal-Mediated Architecture** (Frontend -> Portal -> Operator) to ensure:
+    *   **Auditability**: No commands bypass the central audit log.
+    *   **Security**: Devices do not expose open ports on local networks; they dial out to the Portal via secure WebSocket.
+    *   **Scalability**: Allows fleet management without complex P2P mesh networking.
 
 ## What's Next? (Gap Analysis)
 
