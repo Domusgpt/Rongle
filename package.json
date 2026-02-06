@@ -14,6 +14,7 @@
     "android:apk": "npm run android:build && echo 'APK at: android/app/build/outputs/apk/debug/app-debug.apk'",
     "android:run": "npx cap run android",
     "test:backend": "pytest tests/ -v",
+    "test:e2e": "pytest tests/e2e/test_bridge_integration.py",
     "test": "vitest"
   },
   "dependencies": {
