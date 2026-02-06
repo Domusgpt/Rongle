@@ -12,6 +12,20 @@ dist
 dist-ssr
 *.local
 
+# Android build artifacts
+android/app/build/
+android/.gradle/
+android/build/
+android/local.properties
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+
+# Training data and checkpoints
+training/datasets/
+training/checkpoints/
+training/*.pt
+training/*.onnx
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -27,3 +41,29 @@ dist-ssr
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Pytest
+.pytest_cache/
+
+# Database
+*.db
+*.sqlite

@@ -1,6 +1,6 @@
 import React from 'react';
 import { HardwareState } from '../types';
-import { Monitor, Cpu, Cable, Activity } from 'lucide-react';
+import { Camera, Cpu, Cable, Activity, Cloud, CloudOff } from 'lucide-react';
 
 interface HardwareStatusProps {
   state: HardwareState;
@@ -20,31 +20,45 @@ const StatusItem: React.FC<{ label: string; value: string | number; active: bool
   </div>
 );
 
+const HID_MODE_LABELS: Record<string, string> = {
+  web_serial: 'USB SERIAL',
+  bluetooth: 'BLUETOOTH',
+  websocket: 'WS BRIDGE',
+  clipboard: 'CLIPBOARD',
+  none: 'DISCONNECTED',
+};
+
 export const HardwareStatus: React.FC<HardwareStatusProps> = ({ state }) => {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-      <StatusItem 
-        label="HDMI Input" 
-        value={state.hdmiSignal ? "LOCKED 1080P" : "NO SIGNAL"} 
-        active={state.hdmiSignal}
-        Icon={Monitor}
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      <StatusItem
+        label="Camera"
+        value={state.cameraActive ? "ACTIVE" : "NO FEED"}
+        active={state.cameraActive}
+        Icon={Camera}
       />
-      <StatusItem 
-        label="USB HID" 
-        value={state.hidConnected ? "CONNECTED" : "DISCONNECTED"} 
+      <StatusItem
+        label="HID Output"
+        value={HID_MODE_LABELS[state.hidMode] || 'NONE'}
         active={state.hidConnected}
         Icon={Cable}
       />
-      <StatusItem 
-        label="Inference Latency" 
-        value={`${state.latencyMs}ms`} 
-        active={state.latencyMs < 500}
+      <StatusItem
+        label="Portal"
+        value={state.portalConnected ? "CONNECTED" : "OFFLINE"}
+        active={state.portalConnected}
+        Icon={state.portalConnected ? Cloud : CloudOff}
+      />
+      <StatusItem
+        label="Inference"
+        value={`${state.latencyMs}ms`}
+        active={state.latencyMs > 0 && state.latencyMs < 500}
         Icon={Cpu}
       />
-      <StatusItem 
-        label="Capture FPS" 
-        value={state.fps} 
-        active={state.fps > 24}
+      <StatusItem
+        label="Capture FPS"
+        value={state.fps}
+        active={state.fps > 0}
         Icon={Activity}
       />
     </div>

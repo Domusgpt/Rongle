@@ -1,17 +1,28 @@
 {
-  "name": "copy-of-sentient-kvm---mobile-agent",
+  "name": "rongle",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest",
-    "test:backend": "pytest embedded_agent/tests",
-    "test:e2e": "pytest tests/e2e/test_bridge_integration.py"
+    "android:init": "npx cap add android",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:build": "npm run build && npx cap sync android && cd android && ./gradlew assembleDebug",
+    "android:apk": "npm run android:build && echo 'APK at: android/app/build/outputs/apk/debug/app-debug.apk'",
+    "android:run": "npx cap run android",
+    "test:backend": "pytest tests/ -v",
+    "test": "vitest"
   },
   "dependencies": {
+    "@capacitor/android": "^8.0.2",
+    "@capacitor/camera": "^8.0.0",
+    "@capacitor/cli": "^8.0.2",
+    "@capacitor/core": "^8.0.2",
+    "@capacitor/filesystem": "^8.1.0",
+    "@capacitor/haptics": "^8.0.0",
     "@google/genai": "^1.39.0",
     "lucide-react": "^0.563.0",
     "react": "^19.2.4",
@@ -23,7 +34,7 @@
     "@testing-library/react": "^16.3.2",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
-    "jsdom": "^27.4.0",
+    "jsdom": "^28.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
     "vitest": "^4.0.18"

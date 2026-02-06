@@ -1,9 +1,43 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { VisionAnalysisResult } from "../types";
+import { api } from "./portal-api";
 
-// Initialize the client
-// The API key must be obtained exclusively from the environment variable process.env.API_KEY
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// ---------------------------------------------------------------------------
+// Runtime API key management (NEVER baked into the bundle)
+// ---------------------------------------------------------------------------
+const STORAGE_KEY = 'rongle_gemini_key';
+
+let _cachedClient: InstanceType<typeof GoogleGenAI> | null = null;
+
+/** Store the API key in sessionStorage (cleared on tab close). */
+export function setGeminiApiKey(key: string): void {
+  sessionStorage.setItem(STORAGE_KEY, key);
+  _cachedClient = null; // Force re-creation
+}
+
+/** Get the current API key (from sessionStorage). */
+export function getGeminiApiKey(): string | null {
+  return sessionStorage.getItem(STORAGE_KEY);
+}
+
+/** Check if a Gemini API key is configured. */
+export function hasGeminiApiKey(): boolean {
+  return !!sessionStorage.getItem(STORAGE_KEY);
+}
+
+/** Clear the stored API key. */
+export function clearGeminiApiKey(): void {
+  sessionStorage.removeItem(STORAGE_KEY);
+  _cachedClient = null;
+}
+
+function getClient(): GoogleGenAI {
+  if (_cachedClient) return _cachedClient;
+  const key = getGeminiApiKey();
+  if (!key) throw new Error('No Gemini API key configured. Enter your key in Settings or use Portal mode.');
+  _cachedClient = new GoogleGenAI({ apiKey: key });
+  return _cachedClient;
+}
 
 export const analyzeScreenFrame = async (
   base64Image: string,
@@ -30,8 +64,28 @@ export const analyzeScreenFrame = async (
       Return the response in JSON format.
     `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+    // Priority 1: Use Portal Proxy if configured and authenticated
+    const portalUrl = import.meta.env.VITE_PORTAL_URL;
+    if (portalUrl && !getGeminiApiKey()) {
+      // Assuming we have an auth token if we are using the portal
+      const response = await api.post<{ result: string }>('/llm/query', {
+        prompt,
+        image_base64: base64Image,
+        model: 'gemini-2.0-flash'
+      });
+      if (response.result) {
+        // The portal returns the raw JSON string from the LLM
+        // We might need to clean it if it contains markdown fences,
+        // but the backend service usually handles that or returns cleaned text.
+        // For safety, let's try to parse it.
+        let cleaned = response.result.replace(/```json\n?|```/g, '');
+        return JSON.parse(cleaned) as VisionAnalysisResult;
+      }
+    }
+
+    // Priority 2: Direct Gemini API (Dev/Standalone mode)
+    const response = await getClient().models.generateContent({
+      model: 'gemini-2.0-flash', // Updated model
       contents: {
         parts: [
           {

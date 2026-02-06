@@ -1,0 +1,23 @@
+# Rongle Portal — Python Dependencies
+
+# Web framework
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+
+# Database
+sqlalchemy[asyncio]>=2.0.25
+aiosqlite>=0.20.0
+
+# Auth
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
+# Validation
+pydantic[email]>=2.5.0
+
+# LLM proxy
+google-genai>=1.0.0
+redis>=5.0.0
+
+# WebSocket
+websockets>=12.0

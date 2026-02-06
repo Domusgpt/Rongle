@@ -1,28 +1,33 @@
 import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, '.', '');
-    return {
-      server: {
-        port: 3000,
-        host: '0.0.0.0',
-      },
-      plugins: [react()],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-      },
-      resolve: {
-        alias: {
-          '@': path.resolve(__dirname, '.'),
-        }
-      },
-      test: {
-        globals: true,
-        environment: 'jsdom',
-        setupFiles: './setupTests.ts',
-      }
-    };
+/// <reference types="vitest" />
+
+// SECURITY: API keys are NOT baked into the frontend bundle.
+// In direct mode, the user enters their key at runtime (stored in sessionStorage).
+// In portal mode, the server holds the key and proxies all VLM requests.
+
+export default defineConfig({
+  server: {
+    port: 3000,
+    host: '0.0.0.0',
+  },
+  plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, '.'),
+    },
+  },
+  build: {
+    // Keep the importmap for TF.js (too large to bundle, loaded from CDN)
+    rollupOptions: {
+      external: ['@tensorflow/tfjs'],
+    },
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './tests/setup.ts',
+  },
 });

@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportHeight="108"
+    android:viewportWidth="108">
+    <!-- Rongle "R" monogram in terminal green -->
+    <path
+        android:fillColor="#00ff41"
+        android:pathData="M38,32 L38,76 L44,76 L44,58 L56,58 L64,76 L71,76 L62,57 C66.5,55 69,51 69,46 C69,39 64,32 56,32 Z M44,37 L56,37 C61,37 63,40 63,46 C63,52 61,53 56,53 L44,53 Z" />
+</vector>
