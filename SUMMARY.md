@@ -50,3 +50,15 @@ The following strategic optimizations have been implemented to move Rongle from 
 
 ### 4. Vision & Training
 *   **Data Collection**: A `training/data_collector.py` utility is available to harvest annotated frames for training local CNN models, reducing reliance on cloud VLMs.
+
+### 5. Testing & Quality Assurance
+*   **Frontend**: Integrated `vitest` and `@testing-library/react` for component and service testing.
+*   **Backend**: Added `pytest` suite for the `rongle_operator` to verify actuator and parser logic.
+*   **Integration**: The `android/hardware_bridge.py` serves as an integration test harness for non-Linux hardware.
+
+## What's Next? (Gap Analysis)
+
+To fully mature the system, the following are needed:
+1.  **CI/CD Pipeline**: GitHub Actions workflows to run the `npm test` and `pytest` suites on every commit.
+2.  **End-to-End Tests**: A Playwright suite that simulates the entire loop—Frontend UI -> Portal -> Mock Operator -> Virtual Screen—to verify the full chain.
+3.  **Model Training**: Actual execution of the `training/train.py` script on a GPU cluster to produce the `mobilenet_ssd.onnx` model required for true local Foveated Rendering.
