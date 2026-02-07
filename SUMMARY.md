@@ -65,6 +65,12 @@ The following strategic optimizations have been implemented to move Rongle from 
     *   **Security**: Devices do not expose open ports on local networks; they dial out to the Portal via secure WebSocket.
     *   **Scalability**: Allows fleet management without complex P2P mesh networking.
 
+### 7. Deployment & Operations (New)
+*   **Containerization**: Added Dockerfiles for both `portal` and `rongle_operator`.
+*   **Orchestration**: A `docker-compose.yml` file is now available to spin up the entire stack (Portal, Operator, Postgres, Redis) with a single command.
+*   **CLI Utility**: Created `scripts/rongle` to simplify common tasks like starting services, running tests, and viewing logs.
+*   **Refined Policy**: Added support for explicit `blocked_regions` in the Policy Engine (`guardian.py`) to prevent actions in sensitive screen areas.
+
 ## What's Next? (Gap Analysis)
 
 To fully mature the system, the following are needed:

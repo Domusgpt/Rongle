@@ -8,7 +8,26 @@ This document provides instructions for AI agents (and humans) on how to operate
 *   **Portal**: FastAPI backend. Handles auth, policy, and VLM proxying.
 *   **Frontend**: React PWA. Provides the user interface and remote control.
 
-## 2. Startup Sequence
+## 2. Startup Sequence (Recommended)
+
+### Using the CLI (New)
+The recommended way to start the system is using the `scripts/rongle` utility, which manages Docker containers.
+
+```bash
+# Start all services (Portal, Operator, DB, Redis)
+./scripts/rongle start
+
+# View logs
+./scripts/rongle logs
+
+# Run tests
+./scripts/rongle test
+
+# Stop services
+./scripts/rongle stop
+```
+
+## 3. Manual Startup (Legacy / Dev)
 
 ### A. Portal (Control Plane)
 ```bash
@@ -32,10 +51,10 @@ export GEMINI_API_KEY="your_key" # Or rely on Portal Proxy
 python -m rongle_operator.main --goal "Test Goal" --dry-run
 ```
 
-## 3. Verification Protocols
+## 4. Verification Protocols
 
 ### A. Build Verification
-Run `scripts/verify_build.sh` to check compile integrity and test suites.
+Run `scripts/rongle verify` (or `scripts/verify_build.sh`) to check compile integrity and test suites.
 
 ### B. Runtime Verification (Dry Run)
 1.  Start Portal and Frontend.
@@ -48,7 +67,7 @@ Run `scripts/verify_build.sh` to check compile integrity and test suites.
 2.  Ensure `/dev/hidg0` and `/dev/hidg1` exist (USB Gadgets).
 3.  Run `check_environment()` via `main.py`.
 
-## 4. Troubleshooting
+## 5. Troubleshooting
 
 | Symptom | Diagnosis | Fix |
 |---|---|---|

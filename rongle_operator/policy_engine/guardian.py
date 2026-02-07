@@ -64,6 +64,7 @@ class PolicyVerdict:
 class PolicyConfig:
     """Parsed representation of the allowlist.json policy file."""
     allowed_regions: list[ClickRegion] = field(default_factory=list)
+    blocked_regions: list[ClickRegion] = field(default_factory=list)
     blocked_keystroke_patterns: list[re.Pattern] = field(default_factory=list)
     allowed_keystroke_patterns: list[re.Pattern] = field(default_factory=list)
     max_commands_per_second: float = 50.0
@@ -117,6 +118,9 @@ class PolicyGuardian:
         regions = [
             ClickRegion(**r) for r in raw.get("allowed_regions", [])
         ]
+        blocked_regions = [
+            ClickRegion(**r) for r in raw.get("blocked_regions", [])
+        ]
         blocked_patterns = [
             re.compile(p, re.IGNORECASE)
             for p in raw.get("blocked_keystroke_patterns", [])
@@ -135,6 +139,7 @@ class PolicyGuardian:
 
         self._config = PolicyConfig(
             allowed_regions=regions,
+            blocked_regions=blocked_regions,
             blocked_keystroke_patterns=blocked_patterns,
             allowed_keystroke_patterns=allowed_patterns,
             max_commands_per_second=raw.get("max_commands_per_second", 50.0),
@@ -206,6 +211,15 @@ class PolicyGuardian:
         rate_verdict = self._check_rate_limit()
         if not rate_verdict.allowed:
             return rate_verdict
+
+        # Check explicitly blocked regions first (Blocklist overrides Allowlist)
+        for region in self._config.blocked_regions:
+            if region.contains(x, y):
+                return PolicyVerdict(
+                    allowed=False,
+                    reason=f"Click at ({x}, {y}) inside explicitly blocked region '{region.label}'",
+                    rule_name="blocked_region",
+                )
 
         if self._config.allow_all_regions:
             return PolicyVerdict(allowed=True)

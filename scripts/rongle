@@ -1,0 +1,89 @@
+#!/bin/bash
+# Rongle CLI Utility
+# Unified interface for development and operations
+
+set -e
+
+# Helper to check if docker compose is available
+DOCKER_COMPOSE="docker compose"
+if ! $DOCKER_COMPOSE version >/dev/null 2>&1; then
+    if command -v docker-compose >/dev/null 2>&1; then
+        DOCKER_COMPOSE="docker-compose"
+    else
+        echo "Error: docker compose or docker-compose not found."
+        exit 1
+    fi
+fi
+
+COMMAND=$1
+shift
+
+case "$COMMAND" in
+  start)
+    echo "🚀 Starting Rongle services..."
+    $DOCKER_COMPOSE up -d --build
+    echo "✅ Services started."
+    echo "   - Portal: http://localhost:8000"
+    echo "   - Postgres: localhost:5432"
+    echo "   - Redis: localhost:6379"
+    ;;
+  stop)
+    echo "🛑 Stopping Rongle services..."
+    $DOCKER_COMPOSE down
+    ;;
+  restart)
+    echo "🔄 Restarting Rongle services..."
+    $DOCKER_COMPOSE down
+    $DOCKER_COMPOSE up -d --build
+    ;;
+  logs)
+    $DOCKER_COMPOSE logs -f "$@"
+    ;;
+  shell)
+    SERVICE=${1:-operator}
+    echo "🐚 Entering shell for $SERVICE..."
+    $DOCKER_COMPOSE exec -it "$SERVICE" /bin/bash
+    ;;
+  test)
+    TYPE=${1:-all}
+    if [ "$TYPE" == "backend" ]; then
+        echo "🧪 Running Backend Tests (pytest)..."
+        # Try running in container if up, else local
+        if $DOCKER_COMPOSE ps --services --filter "status=running" | grep -q "operator"; then
+             $DOCKER_COMPOSE exec operator pytest
+        else
+             npm run test:backend
+        fi
+    elif [ "$TYPE" == "frontend" ]; then
+        echo "🧪 Running Frontend Tests (vitest)..."
+        npm run test
+    else
+        echo "🧪 Running All Tests..."
+        echo "   [Frontend]"
+        npm run test
+        echo "   [Backend]"
+        if $DOCKER_COMPOSE ps --services --filter "status=running" | grep -q "operator"; then
+             $DOCKER_COMPOSE exec operator pytest
+        else
+             npm run test:backend
+        fi
+    fi
+    ;;
+  verify)
+    echo "🔍 Verifying build integrity..."
+    ./scripts/verify_build.sh
+    ;;
+  help|*)
+    echo "Usage: $0 {start|stop|restart|logs|shell|test|verify}"
+    echo ""
+    echo "Commands:"
+    echo "  start       Start all services (Portal, Operator, DB, Redis) in background"
+    echo "  stop        Stop all services"
+    echo "  restart     Restart all services"
+    echo "  logs [svc]  Tail logs (optional: specific service name)"
+    echo "  shell [svc] Open shell in container (default: operator)"
+    echo "  test [type] Run tests (all|backend|frontend)"
+    echo "  verify      Run build verification script"
+    exit 1
+    ;;
+esac
