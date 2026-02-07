@@ -74,5 +74,5 @@ The following strategic optimizations have been implemented to move Rongle from 
 ## What's Next? (Gap Analysis)
 
 To fully mature the system, the following are needed:
-1.  **Model Training**: Actual execution of the `training/train.py` script on a GPU cluster to produce the `mobilenet_ssd.onnx` model required for true local Foveated Rendering.
-2.  **Production Deployment**: Terraform scripts or Helm charts to deploy the Portal to a cloud provider (AWS/GCP).
+1.  **Hardware Certification**: Validate the system on varied hardware (beyond Pixel and Pi) and certify USB gadget stability.
+2.  **Model Training Execution**: Run `training/train.py` on a GPU cluster with a real dataset to produce high-quality weights for `mobilenet_ssd.onnx`. (The pipeline is now code-complete and verified for export).

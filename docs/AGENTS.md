@@ -5,6 +5,7 @@ This document provides instructions for AI agents (and humans) on how to operate
 ## 1. System Topology
 
 *   **Rongle Operator**: Python daemon running on the edge device (Pi/Android). Handles hardware I/O and local vision.
+*   **Rongle Training**: Utilities for dataset collection and model training (`training/`).
 *   **Portal**: FastAPI backend. Handles auth, policy, and VLM proxying.
 *   **Frontend**: React PWA. Provides the user interface and remote control.
 
@@ -67,7 +68,18 @@ Run `scripts/rongle verify` (or `scripts/verify_build.sh`) to check compile inte
 2.  Ensure `/dev/hidg0` and `/dev/hidg1` exist (USB Gadgets).
 3.  Run `check_environment()` via `main.py`.
 
-## 5. Troubleshooting
+## 5. Model Training
+
+The `training/` directory contains tools to fine-tune the local CNN.
+
+1.  **Install Deps**: `pip install -r training/requirements.txt`
+2.  **Train**:
+    ```bash
+    python -m training.train --dataset /path/to/data --epochs 50
+    ```
+3.  **Export**: The script automatically exports `mobilenet_ssd.onnx`. Copy this to `rongle_operator/visual_cortex/`.
+
+## 6. Troubleshooting
 
 | Symptom | Diagnosis | Fix |
 |---|---|---|

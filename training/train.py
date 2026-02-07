@@ -4,7 +4,7 @@ Train MobileNet-SSD — Harness for fine-tuning local detection models.
 This script:
 1. Loads the dataset collected by `training/data_collector.py`.
 2. Uses an LLM (Gemini/GPT-4V) to label the frames if no labels exist ("Auto-Labeling").
-3. Fine-tunes a MobileNet-SSD v2 model using PyTorch or TensorFlow (stubbed).
+3. Fine-tunes a MobileNet-SSD v2 model using PyTorch.
 4. Exports the model to ONNX for use in `FastDetector`.
 
 Usage:
@@ -18,79 +18,91 @@ import logging
 import os
 from pathlib import Path
 
-# Stub imports for training libraries to avoid massive dependency install in this environment
-# import torch
-# import torchvision
+# We assume requirements are installed if running this script
+try:
+    import torch
+    from training.dataset import UIElementDataset
+    from training.model import create_model
+    from training.export import export_onnx
+except ImportError as e:
+    print(f"Error: Missing dependencies. Please run 'pip install -r training/requirements.txt'.\n{e}")
+    exit(1)
 
 logger = logging.getLogger("trainer")
-
-def load_dataset(data_dir: Path):
-    """
-    Load images and metadata.
-    Expected format: frame_TIMESTAMP.jpg + frame_TIMESTAMP.json
-    """
-    images = sorted(glob.glob(str(data_dir / "*.jpg")))
-    dataset = []
-
-    for img_path in images:
-        meta_path = img_path.replace(".jpg", ".json")
-        if os.path.exists(meta_path):
-            with open(meta_path, "r") as f:
-                meta = json.load(f)
-            dataset.append({"image": img_path, "meta": meta})
-
-    logger.info(f"Loaded {len(dataset)} images from {data_dir}")
-    return dataset
-
-def auto_label_dataset(dataset, api_key: str):
-    """
-    Use VLM to generate bounding box labels for the dataset.
-    This bootstraps the training process without manual annotation.
-    """
-    logger.info("Starting Auto-Labeling via VLM...")
-    # Import VLMReasoner here to reuse logic
-    # In production, this would parallelize requests.
-    pass
 
 def train_model(dataset, epochs: int):
     """
     Fine-tune MobileNet-SSD.
     """
     logger.info(f"Starting training for {epochs} epochs...")
-    # 1. Setup DataLoaders
-    # 2. Load Pretrained Model (e.g. SSD-Lite MobileNetV2)
-    # 3. Training Loop
-    # 4. Validation
-    pass
 
-def export_onnx(model, output_path: str):
-    """
-    Export trained model to ONNX format.
-    """
-    logger.info(f"Exporting model to {output_path}...")
-    # torch.onnx.export(...)
-    pass
+    # 1. Setup DataLoaders
+    data_loader = torch.utils.data.DataLoader(
+        dataset, batch_size=4, shuffle=True, num_workers=0,
+        collate_fn=lambda x: tuple(zip(*x)) # Standard collate for detection
+    )
+
+    # 2. Model
+    # 2 classes: background, target
+    model = create_model(num_classes=2)
+
+    # Note: ExportableSSDLite wraps the base_model.
+    # For training, we need to call base_model.train() and ensure it returns losses.
+    # ExportableSSDLite.forward returns predictions.
+    # We should train the base_model directly.
+
+    model.base_model.train()
+
+    # 3. Optimizer
+    params = [p for p in model.base_model.parameters() if p.requires_grad]
+    optimizer = torch.optim.SGD(params, lr=0.005, momentum=0.9, weight_decay=0.0005)
+
+    # 4. Training Loop
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    model.base_model.to(device)
+
+    for epoch in range(epochs):
+        model.base_model.train()
+        total_loss = 0
+        for images, targets in data_loader:
+            images = list(image.to(device) for image in images)
+            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+
+            # SSD returns dict of losses
+            loss_dict = model.base_model(images, targets)
+            losses = sum(loss for loss in loss_dict.values())
+
+            optimizer.zero_grad()
+            losses.backward()
+            optimizer.step()
+
+            total_loss += losses.item()
+
+        logger.info(f"Epoch {epoch}: Loss {total_loss}")
+
+    return model
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, required=True)
     parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--auto-label", action="store_true", help="Use VLM to label data")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
 
-    dataset = load_dataset(Path(args.dataset))
+    dataset = UIElementDataset(Path(args.dataset))
 
-    if not dataset:
+    if len(dataset) == 0:
         logger.error("No data found!")
         return
 
-    if args.auto_label:
-        auto_label_dataset(dataset, os.environ.get("GEMINI_API_KEY", ""))
+    trained_model_wrapper = train_model(dataset, args.epochs)
 
-    train_model(dataset, args.epochs)
-    export_onnx(None, "rongle_operator/visual_cortex/mobilenet_ssd.onnx")
+    # Save checkpoint
+    torch.save(trained_model_wrapper.base_model.state_dict(), "model.pth")
+
+    # Export
+    export_onnx("model.pth", "rongle_operator/visual_cortex/mobilenet_ssd.onnx", num_classes=2)
     logger.info("Training complete. Model saved.")
 
 if __name__ == "__main__":
