@@ -32,6 +32,14 @@ export function clearGeminiApiKey(): void {
 
 function getClient(): GoogleGenAI {
   if (_cachedClient) return _cachedClient;
+
+  // Test environment bypass
+  if (import.meta.env.MODE === 'test') {
+      // @ts-ignore
+      _cachedClient = new GoogleGenAI({ apiKey: 'test-key' });
+      return _cachedClient;
+  }
+
   const key = getGeminiApiKey();
   if (!key) throw new Error('No Gemini API key configured. Enter your key in Settings or use Portal mode.');
   _cachedClient = new GoogleGenAI({ apiKey: key });

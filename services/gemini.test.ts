@@ -33,7 +33,7 @@ describe('analyzeScreenFrame', () => {
 
   it('should return analysis result when API call is successful', async () => {
     const mockResponse = {
-      text: () => JSON.stringify({
+      text: JSON.stringify({
         description: 'A test screen',
         suggestedAction: 'Click button',
         duckyScript: 'DELAY 100',

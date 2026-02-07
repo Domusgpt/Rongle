@@ -1,3 +1,3 @@
-from .guardian import PolicyGuardian
+from .guardian import PolicyGuardian, PolicyVerdict
 
-__all__ = ["PolicyGuardian"]
+__all__ = ["PolicyGuardian", "PolicyVerdict"]
