@@ -56,6 +56,8 @@ The following strategic optimizations have been implemented to move Rongle from 
 *   **Frontend**: Integrated `vitest` and `@testing-library/react` for component and service testing.
 *   **Backend**: Added `pytest` suite for the `rongle_operator` to verify actuator and parser logic.
 *   **Integration**: The `android/hardware_bridge.py` serves as an integration test harness for non-Linux hardware.
+*   **CI/CD**: Added `.github/workflows/ci.yml` to automate testing on every push.
+*   **E2E**: Added `tests/e2e/agent_flow.spec.ts` (Playwright) to verify critical user flows like Authentication and Dashboard access.
 
 ### 6. Architectural Decisions (Addressing Review Feedback)
 *   **Communication Bridge**: Previous reviews suggested a direct Frontend<->Backend bridge (Bluetooth/WS). We explicitly chose a **Portal-Mediated Architecture** (Frontend -> Portal -> Operator) to ensure:
@@ -66,6 +68,5 @@ The following strategic optimizations have been implemented to move Rongle from 
 ## What's Next? (Gap Analysis)
 
 To fully mature the system, the following are needed:
-1.  **CI/CD Pipeline**: GitHub Actions workflows to run the `npm test` and `pytest` suites on every commit.
-2.  **End-to-End Tests**: A Playwright suite that simulates the entire loop—Frontend UI -> Portal -> Mock Operator -> Virtual Screen—to verify the full chain.
-3.  **Model Training**: Actual execution of the `training/train.py` script on a GPU cluster to produce the `mobilenet_ssd.onnx` model required for true local Foveated Rendering.
+1.  **Model Training**: Actual execution of the `training/train.py` script on a GPU cluster to produce the `mobilenet_ssd.onnx` model required for true local Foveated Rendering.
+2.  **Production Deployment**: Terraform scripts or Helm charts to deploy the Portal to a cloud provider (AWS/GCP).
