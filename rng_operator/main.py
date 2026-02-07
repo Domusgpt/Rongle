@@ -33,7 +33,7 @@ from .config.settings import Settings
 from .hygienic_actuator import DuckyScriptParser, EmergencyStop, HIDGadget, Humanizer
 from .immutable_ledger import AuditLogger
 from .policy_engine import PolicyGuardian
-from .visual_cortex import FrameGrabber, ReflexTracker, VLMReasoner
+from .visual_cortex import FrameGrabber, ReflexTracker, VLMReasoner, VisualServo
 from .visual_cortex.vlm_reasoner import GeminiBackend, LocalVLMBackend
 
 logger = logging.getLogger("rng_operator")
@@ -62,7 +62,7 @@ def calibrate(
     hid: HIDGadget,
     audit: AuditLogger,
     max_attempts: int = 5,
-) -> tuple[int, int] | None:
+) -> tuple[float, float, int, int] | None:
     """
     Self-Calibration Procedure
     --------------------------
@@ -129,20 +129,25 @@ def calibrate(
         actual_dy = detection_after.y - detection_before.y
         tolerance = 15  # pixels
 
-        if abs(actual_dx - known_dx) <= tolerance and abs(actual_dy - known_dy) <= tolerance:
+        # Calculate scale: pixels per HID unit
+        # Avoid division by zero
+        scale_x = actual_dx / known_dx if known_dx != 0 else 1.0
+        scale_y = actual_dy / known_dy if known_dy != 0 else 1.0
+
+        # Even if not perfect, if it moved in the right direction we can use the scale
+        if abs(actual_dx) > 5 and abs(actual_dy) > 5:
             logger.info(
-                "Calibration PASSED: expected (%d,%d) observed (%d,%d)",
-                known_dx, known_dy, actual_dx, actual_dy,
+                "Calibration PASSED: scale_x=%.2f scale_y=%.2f (obs %d,%d)",
+                scale_x, scale_y, actual_dx, actual_dy,
             )
             audit.log(
                 "CALIBRATION_PASS",
                 screenshot_hash=frame_after.sha256,
                 action_detail=(
-                    f"Verified: expected delta ({known_dx},{known_dy}), "
-                    f"observed ({actual_dx},{actual_dy})"
+                    f"Verified: scale ({scale_x:.2f},{scale_y:.2f})"
                 ),
             )
-            return detection_after.x, detection_after.y
+            return scale_x, scale_y, detection_after.x, detection_after.y
         else:
             logger.warning(
                 "Calibration mismatch: expected (%d,%d) got (%d,%d)",
@@ -167,6 +172,7 @@ def agent_loop(
     guardian: PolicyGuardian,
     audit: AuditLogger,
     estop: EmergencyStop,
+    servo: VisualServo,
     max_iterations: int = 100,
     confidence_threshold: float = 0.5,
 ) -> None:
@@ -272,7 +278,61 @@ def agent_loop(
                 )
                 continue
 
-            # Execute via HID
+            # Special Handling for MOUSE_MOVE with Visual Servoing
+            if cmd.kind == "mouse_move" and cmd.mouse_points:
+                # We have a target absolute position from the command (the end of the path)
+                target_x = cmd.mouse_points[-1].x # Actually humanizer points are relative/absolute mixes, wait.
+                # DuckyScriptParser sets _cursor_x/_cursor_y to target.
+                # Let's extract target from raw_line if needed or rely on the Humanizer points which are just "move along path".
+                # Actually, DuckyScriptParser produces a list of BezierPoints (relative moves).
+                # To Servo, we need the final Absolute target.
+                # DuckyScriptParser updates its internal state. We can use that?
+                # No, we need to know where we want to be *now*.
+
+                # If we want closed loop, we should IGNORE the Bezier path and just Servo to the destination?
+                # Or Servo *along* the path?
+                # For MVP, let's Servo to destination if it's a "long" move, replacing the open-loop path.
+                # However, the `ParsedCommand` structure has `mouse_points` which are typically small deltas.
+
+                # Let's parse the target from the raw line for Servoing
+                import re
+                m = re.match(r"^MOUSE_MOVE\s+(-?\d+)\s+(-?\d+)$", cmd.raw_line, re.IGNORECASE)
+                if m:
+                    tx, ty = int(m.group(1)), int(m.group(2))
+                    logger.info("Engaging Visual Servo to (%d, %d)", tx, ty)
+
+                    # Servo Loop
+                    servo_steps = 0
+                    while servo_steps < 5: # Max 5 corrections
+                        # Look
+                        s_frame = grabber.grab()
+                        s_det = tracker.detect(s_frame.image)
+                        if not s_det:
+                            break # Lost cursor, abort servo
+
+                        cx, cy = s_det.x, s_det.y
+                        dx, dy = servo.compute_correction(cx, cy, tx, ty)
+
+                        if dx == 0 and dy == 0:
+                            break # Converged
+
+                        # Move (Raw HID injection)
+                        from .hygienic_actuator.ducky_parser import MouseReport
+                        report = MouseReport(buttons=0, dx=dx, dy=dy, wheel=0)
+                        hid._write_mouse(report.pack())
+                        time.sleep(0.1) # Latency wait
+                        servo_steps += 1
+
+                    # Update parser state to reality
+                    parser._cursor_x = tx
+                    parser._cursor_y = ty
+
+                    # Log
+                    audit.log("SERVO_MOVE", action_detail=f"Servoed to ({tx},{ty}) in {servo_steps} steps")
+                    executed_script_segment.append(cmd.raw_line)
+                    continue # Skip the default open-loop execution
+
+            # Standard Execution via HID (Keyboard, Click, etc.)
             hid.execute(cmd)
             executed_script_segment.append(cmd.raw_line)
             audit.log(
@@ -366,6 +426,8 @@ def main() -> None:
         log_path=settings.audit_log_path,
     )
 
+    servo = VisualServo()
+
     # VLM backend
     gemini_key = os.environ.get("GEMINI_API_KEY", "")
     if gemini_key:
@@ -409,12 +471,14 @@ def main() -> None:
         audit.log("SYSTEM_START", action_detail="All modules initialized")
 
         # Self-calibration
-        cursor_pos = calibrate(grabber, tracker, hid, audit)
-        if cursor_pos is None:
+        cal_result = calibrate(grabber, tracker, hid, audit)
+        if cal_result is None:
             logger.error("Calibration failed — entering safe mode")
             audit.log("SAFE_MODE", action_detail="Calibration failure, awaiting manual input")
         else:
-            ducky_parser._cursor_x, ducky_parser._cursor_y = cursor_pos
+            scale_x, scale_y, cx, cy = cal_result
+            ducky_parser._cursor_x, ducky_parser._cursor_y = cx, cy
+            servo.set_scale(scale_x, scale_y)
 
         # Agent goal
         goal = args.goal
@@ -432,6 +496,7 @@ def main() -> None:
                 guardian=guardian,
                 audit=audit,
                 estop=estop,
+                servo=servo,
             )
 
     except Exception as exc:

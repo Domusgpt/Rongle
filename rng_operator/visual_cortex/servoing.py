@@ -29,21 +29,26 @@ class VisualServo:
         # Ideally, this should be calibrated.
         self.J_inv = np.eye(2)
 
-    def update_jacobian(self, dx_mouse: int, dy_mouse: int, dx_image: int, dy_image: int):
-        """Update the Jacobian estimate based on observed motion."""
-        if dx_image == 0 and dy_image == 0:
+    def set_scale(self, scale_x: float, scale_y: float):
+        """
+        Update the Jacobian approximation based on calibration.
+        scale_x = pixels_moved / hid_units_sent
+        """
+        # J = diag(scale_x, scale_y)
+        # J_inv = diag(1/scale_x, 1/scale_y)
+        if scale_x == 0 or scale_y == 0:
             return
-
-        # Simple online update (Broden's method or similar could be used here)
-        # For now, we just log it or keep it static as per MVP
-        pass
+        self.J_inv = np.array([[1.0/scale_x, 0], [0, 1.0/scale_y]])
 
     def compute_correction(self, current_x: int, current_y: int, target_x: int, target_y: int) -> tuple[int, int]:
         """
         Calculate the next mouse delta to reduce error.
+        Target is where we want to go. Current is where we are.
+        Error = Target - Current (Vector pointing TO target)
         """
-        error_x = current_x - target_x
-        error_y = current_y - target_y
+        # Vector from Current to Target
+        error_x = target_x - current_x
+        error_y = target_y - current_y
 
         dist = (error_x**2 + error_y**2)**0.5
         if dist < self.config.deadband_px:
@@ -52,13 +57,16 @@ class VisualServo:
         # Control law: u = -lambda * e
         # We need to map this to mouse delta using J_inv
 
-        # Error vector
+        # Error vector (in Image Frame)
         e = np.array([error_x, error_y])
 
-        # Velocity in image space
-        v_image = -self.config.gain * e
+        # We want to move ALONG the error vector, proportional to gain
+        # If error is (100, 0), we want to move Right.
+        # HID Delta = J_inv * (Gain * Error)
 
-        # Velocity in mouse space
+        v_image = self.config.gain * e
+
+        # Velocity in mouse space (HID units)
         v_mouse = self.J_inv @ v_image
 
         return int(v_mouse[0]), int(v_mouse[1])
