@@ -71,7 +71,7 @@ export const analyzeScreenFrame = async (
       const response = await api.post<{ result: string }>('/llm/query', {
         prompt,
         image_base64: base64Image,
-        model: 'gemini-2.0-flash'
+        model: 'gemini-3.0-pro'
       });
       if (response.result) {
         // The portal returns the raw JSON string from the LLM
@@ -85,7 +85,7 @@ export const analyzeScreenFrame = async (
 
     // Priority 2: Direct Gemini API (Dev/Standalone mode)
     const response = await getClient().models.generateContent({
-      model: 'gemini-2.0-flash', // Updated model
+      model: 'gemini-3.0-pro', // Updated model
       contents: {
         parts: [
           {

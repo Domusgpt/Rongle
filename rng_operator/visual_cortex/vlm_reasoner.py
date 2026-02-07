@@ -75,12 +75,12 @@ class VLMBackend(ABC):
 # ---------------------------------------------------------------------------
 class GeminiBackend(VLMBackend):
     """
-    Uses Google Gemini (gemini-2.0-flash or similar) for vision reasoning.
+    Uses Google Gemini (gemini-3.0-pro or similar) for vision reasoning.
 
     Requires the ``google-genai`` package and a valid API key.
     """
 
-    def __init__(self, api_key: str, model: str = "gemini-2.0-flash") -> None:
+    def __init__(self, api_key: str, model: str = "gemini-3.0-pro") -> None:
         self.api_key = api_key
         self.model = model
         self._client = None

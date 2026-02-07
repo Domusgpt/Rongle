@@ -32,7 +32,7 @@ class Settings:
 
     # Visual Cortex
     cursor_templates_dir: str = "assets/cursors"
-    vlm_model: str = "gemini-2.0-flash"
+    vlm_model: str = "gemini-3.0-pro"
     local_vlm_model: str = "HuggingFaceTB/SmolVLM-256M-Instruct"
 
     # Policy
