@@ -1,0 +1,68 @@
+#!/bin/bash
+# Rongle CLI — Unified management tool
+
+set -e
+
+function show_help {
+    echo "Rongle CLI"
+    echo "Usage: ./scripts/rongle [COMMAND]"
+    echo ""
+    echo "Commands:"
+    echo "  start       Start the full stack (Portal + Operator + Frontend)"
+    echo "  stop        Stop all services"
+    echo "  restart     Restart all services"
+    echo "  logs        Follow logs"
+    echo "  test        Run all tests (Frontend + Backend)"
+    echo "  build       Build Docker images"
+    echo "  pixel       Run the Pixel 10 test wizard"
+    echo "  shell       Open a shell in the operator container"
+    echo "  verify      Run pre-flight verification"
+    echo ""
+}
+
+case "$1" in
+    start)
+        echo "Starting Rongle Stack..."
+        docker-compose up -d
+        ;;
+    stop)
+        echo "Stopping Rongle Stack..."
+        docker-compose down
+        ;;
+    restart)
+        docker-compose restart
+        ;;
+    logs)
+        docker-compose logs -f
+        ;;
+    test)
+        echo "=== Frontend Tests ==="
+        npm run test
+        echo "=== Backend Tests ==="
+        # If running in docker, use docker exec. Else local pytest.
+        if [ -f /.dockerenv ]; then
+            pytest rng_operator/tests
+        else
+            npm run test:backend
+        fi
+        ;;
+    build)
+        docker-compose build
+        ;;
+    pixel)
+        python3 scripts/setup_pixel_test.py
+        ;;
+    shell)
+        docker-compose exec operator /bin/bash
+        ;;
+    verify)
+        echo "Checking environment..."
+        python3 -c "import cv2; print(f'OpenCV: {cv2.__version__}')"
+        node -v
+        npm -v
+        echo "OK"
+        ;;
+    *)
+        show_help
+        ;;
+esac
