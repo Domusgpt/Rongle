@@ -70,9 +70,10 @@ The following strategic optimizations have been implemented to move Rongle from 
 *   **Orchestration**: A `docker-compose.yml` file is now available to spin up the entire stack (Portal, Operator, Postgres, Redis) with a single command.
 *   **CLI Utility**: Created `scripts/rongle` to simplify common tasks like starting services, running tests, and viewing logs.
 *   **Refined Policy**: Added support for explicit `blocked_regions` in the Policy Engine (`guardian.py`) to prevent actions in sensitive screen areas.
+*   **Hardware Certification**: Added `scripts/certify_hardware.py` to rigorously test USB gadget stability and camera performance on new devices.
 
 ## What's Next? (Gap Analysis)
 
 To fully mature the system, the following are needed:
-1.  **Hardware Certification**: Validate the system on varied hardware (beyond Pixel and Pi) and certify USB gadget stability.
+1.  **Hardware Certification Execution**: Validate the system on varied hardware (beyond Pixel and Pi) and certify USB gadget stability.
 2.  **Model Training Execution**: Run `training/train.py` on a GPU cluster with a real dataset to produce high-quality weights for `mobilenet_ssd.onnx`. (The pipeline is now code-complete and verified for export).
