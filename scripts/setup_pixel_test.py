@@ -130,6 +130,9 @@ def main():
     subprocess.check_call(["npm", "install"], shell=True) # shell=True for windows compat
     print_success("Frontend dependencies installed.")
 
+    print(f"\n{Color.CYAN}Tip: You can also build a standalone Android APK to run the frontend without this PC server.{Color.RESET}")
+    print(f"     See: docs/android/BUILDING_APK.md\n")
+
     # 5. Launch
     print_step("Launching System")
     print(f"{Color.YELLOW}Press Ctrl+C to stop all services.{Color.RESET}")
