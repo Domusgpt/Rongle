@@ -313,7 +313,7 @@ def agent_loop(
 
         servo_success = visual_servo_move(
             target_cx, target_cy,
-            grabber, tracker, hid, ducky_parser
+            grabber, tracker, hid, parser
         )
 
         if servo_success:
