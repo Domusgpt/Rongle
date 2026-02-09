@@ -64,9 +64,8 @@ Run `scripts/rongle verify` (or `scripts/verify_build.sh`) to check compile inte
 4.  Confirm `AGENT_START` and `HEARTBEAT` events appear.
 
 ### C. Hardware Verification
-1.  Ensure `/dev/video0` exists (Camera).
-2.  Ensure `/dev/hidg0` and `/dev/hidg1` exist (USB Gadgets).
-3.  Run `check_environment()` via `main.py`.
+1.  Run the certification script: `sudo python3 scripts/certify_hardware.py`
+2.  Review `hardware_report.json` for pass/fail status on gadgets and cameras.
 
 ## 5. Model Training
 
