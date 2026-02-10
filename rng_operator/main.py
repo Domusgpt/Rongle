@@ -481,7 +481,11 @@ def main() -> None:
         logger.warning(f"\n\n{'!'*40}\nDEV MODE TOGGLED: {state_str}\n{'!'*40}\n")
         audit.log("DEV_MODE_TOGGLE", action_detail=f"User toggled Dev Mode to {new_state}")
 
-    key_monitor = KeyMonitor(callback=toggle_dev_mode, trigger_key='(')
+    # Konami Code trigger: "up up down down left right left right b a start"
+    key_monitor = KeyMonitor(
+        callback=toggle_dev_mode,
+        trigger_phrase="up up down down left right left right b a start"
+    )
 
     # --- Start ---
     try:

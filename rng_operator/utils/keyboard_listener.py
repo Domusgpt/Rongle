@@ -12,9 +12,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 class KeyMonitor:
-    def __init__(self, callback, trigger_key='('):
+    def __init__(self, callback, trigger_phrase="up up down down left right left right b a start"):
         self.callback = callback
-        self.trigger_key = trigger_key
+        self.trigger_phrase = trigger_phrase
+        self.buffer = ""
         self.running = False
         self._thread = None
 
@@ -39,8 +40,15 @@ class KeyMonitor:
             while self.running:
                 if select.select([sys.stdin], [], [], 0.1)[0]:
                     ch = sys.stdin.read(1)
-                    if ch == self.trigger_key:
+                    # Simple sliding window buffer
+                    self.buffer += ch
+                    # Keep buffer size manageable (length of trigger + wiggle room)
+                    if len(self.buffer) > len(self.trigger_phrase) + 5:
+                        self.buffer = self.buffer[-(len(self.trigger_phrase) + 5):]
+
+                    if self.trigger_phrase in self.buffer:
                         self.callback()
+                        self.buffer = "" # Reset buffer after trigger
         except Exception as e:
             logger.error(f"Keyboard monitor error: {e}")
         finally:
