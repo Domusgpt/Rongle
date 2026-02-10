@@ -10,6 +10,7 @@ function show_help {
     echo ""
     echo "  🚀 Development"
     echo "     start       Start the full stack via Docker Compose"
+    echo "     dev         Start in Unsafe Dev Mode (No Policy Guardian)"
     echo "     stop        Stop all running services"
     echo "     restart     Restart all services"
     echo "     logs        Follow logs from all containers"
@@ -31,6 +32,11 @@ case "$1" in
     start)
         echo "Starting Rongle Stack..."
         docker-compose up -d
+        ;;
+    dev)
+        echo "Starting Rongle Stack in DEV MODE (Unsafe)..."
+        # We override the command for the operator service
+        GEMINI_API_KEY=${GEMINI_API_KEY} docker-compose run --rm --service-ports operator python -m rng_operator.main --dry-run --software-estop --dev-mode
         ;;
     stop)
         echo "Stopping Rongle Stack..."

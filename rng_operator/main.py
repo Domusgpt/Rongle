@@ -381,6 +381,8 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="No actual HID output")
     parser.add_argument("--software-estop", action="store_true",
                         help="Use software-only emergency stop (no GPIO)")
+    parser.add_argument("--dev-mode", action="store_true",
+                        help="Disable safety policies (DANGEROUS)")
     args = parser.parse_args()
 
     # Logging setup
@@ -394,6 +396,10 @@ def main() -> None:
     )
 
     settings = Settings.load(args.config)
+
+    # CLI override for dev_mode
+    if args.dev_mode:
+        settings.dev_mode = True
 
     # --- Initialize all modules ---
     humanizer = Humanizer(
@@ -421,6 +427,7 @@ def main() -> None:
     )
     guardian = PolicyGuardian(
         allowlist_path=settings.allowlist_path,
+        dev_mode=settings.dev_mode,
     )
     audit = AuditLogger(
         log_path=settings.audit_log_path,

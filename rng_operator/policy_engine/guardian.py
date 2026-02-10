@@ -99,8 +99,13 @@ class PolicyGuardian:
         }
     """
 
-    def __init__(self, allowlist_path: str | Path = "config/allowlist.json") -> None:
+    def __init__(
+        self,
+        allowlist_path: str | Path = "config/allowlist.json",
+        dev_mode: bool = False,
+    ) -> None:
         self.allowlist_path = Path(allowlist_path)
+        self.dev_mode = dev_mode
         self._config = PolicyConfig()
         self._command_timestamps: list[float] = []
         self.load()
@@ -110,6 +115,15 @@ class PolicyGuardian:
     # ------------------------------------------------------------------
     def load(self) -> None:
         """Load or reload the policy allowlist from disk."""
+        if self.dev_mode:
+            logger.warning("PolicyGuardian: DEV MODE ACTIVE — SAFETY CHECKS DISABLED")
+            self._config = PolicyConfig(
+                allow_all_regions=True,
+                max_commands_per_second=1000.0,
+                max_mouse_speed_px_per_s=100000.0,
+            )
+            return
+
         if not self.allowlist_path.exists():
             logger.warning(
                 "Allowlist not found at %s — using permissive defaults",

@@ -47,6 +47,7 @@ class Settings:
     # Agent
     max_iterations: int = 100
     confidence_threshold: float = 0.5
+    dev_mode: bool = False
 
     @classmethod
     def load(cls, path: str | Path = "rng_operator/config/settings.json") -> Settings:

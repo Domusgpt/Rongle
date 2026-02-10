@@ -45,6 +45,7 @@ You want to modify the code, fix bugs, or add features.
     We have a unified CLI helper `scripts/rongle`.
     ```bash
     ./scripts/rongle start   # Spin up the full stack (Docker)
+    ./scripts/rongle dev     # Run in Dev Mode (Unsafe/No Policy)
     ./scripts/rongle test    # Run all unit tests
     ./scripts/rongle verify  # Check your environment
     ```
