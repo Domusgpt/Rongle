@@ -35,6 +35,7 @@ from .immutable_ledger import AuditLogger
 from .policy_engine import PolicyGuardian
 from .visual_cortex import FrameGrabber, ReflexTracker, VLMReasoner, VisualServo
 from .visual_cortex.vlm_reasoner import GeminiBackend, LocalVLMBackend
+from .utils.keyboard_listener import KeyMonitor
 
 logger = logging.getLogger("rng_operator")
 
@@ -469,8 +470,22 @@ def main() -> None:
     signal.signal(signal.SIGINT, _shutdown)
     signal.signal(signal.SIGTERM, _shutdown)
 
+    # Dev Mode Toggle
+    def toggle_dev_mode():
+        current = guardian.dev_mode
+        new_state = not current
+        guardian.dev_mode = new_state
+        # Reload to apply permissive/restrictive rules immediately
+        guardian.load()
+        state_str = "ENABLED (UNSAFE)" if new_state else "DISABLED (SAFE)"
+        logger.warning(f"\n\n{'!'*40}\nDEV MODE TOGGLED: {state_str}\n{'!'*40}\n")
+        audit.log("DEV_MODE_TOGGLE", action_detail=f"User toggled Dev Mode to {new_state}")
+
+    key_monitor = KeyMonitor(callback=toggle_dev_mode, trigger_key='(')
+
     # --- Start ---
     try:
+        key_monitor.start()
         hid.open()
         grabber.open()
         estop.start()
@@ -511,6 +526,7 @@ def main() -> None:
         audit.log("FATAL_ERROR", action_detail=str(exc))
     finally:
         logger.info("Shutting down...")
+        key_monitor.stop()
         hid.release_all()
         estop.stop()
         grabber.close()
