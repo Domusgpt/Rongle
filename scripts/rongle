@@ -9,8 +9,9 @@ function show_help {
     echo "Usage: ./scripts/rongle [COMMAND]"
     echo ""
     echo "  🚀 Development"
+    echo "     setup       Install dependencies (System, Python, Node)"
+    echo "     dev         Start local dev environment (No Docker)"
     echo "     start       Start the full stack via Docker Compose"
-    echo "     dev         Start in Unsafe Dev Mode (No Policy Guardian)"
     echo "     stop        Stop all running services"
     echo "     restart     Restart all services"
     echo "     logs        Follow logs from all containers"
@@ -33,8 +34,14 @@ case "$1" in
         echo "Starting Rongle Stack..."
         docker-compose up -d
         ;;
+    setup)
+        ./scripts/install_dependencies.sh
+        ;;
     dev)
-        echo "Starting Rongle Stack in DEV MODE (Unsafe)..."
+        ./scripts/start_dev_env.sh
+        ;;
+    docker-dev)
+        echo "Starting Rongle Stack in DEV MODE (Docker)..."
         # We override the command for the operator service
         GEMINI_API_KEY=${GEMINI_API_KEY} docker-compose run --rm --service-ports operator python -m rng_operator.main --dry-run --software-estop --dev-mode
         ;;

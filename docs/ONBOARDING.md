@@ -44,10 +44,10 @@ You want to modify the code, fix bugs, or add features.
 2.  **Use the CLI Tool:**
     We have a unified CLI helper `scripts/rongle`.
     ```bash
-    ./scripts/rongle start   # Spin up the full stack (Docker)
-    ./scripts/rongle dev     # Run in Dev Mode (Unsafe/No Policy)
+    ./scripts/rongle setup   # Install dependencies (System + Python + Node)
+    ./scripts/rongle dev     # Start local dev environment (Backend + Frontend)
+    ./scripts/rongle start   # Spin up the full production stack (Docker)
     ./scripts/rongle test    # Run all unit tests
-    ./scripts/rongle verify  # Check your environment
     ```
 
 3.  **Where is the code?**
