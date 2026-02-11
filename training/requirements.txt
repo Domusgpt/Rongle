@@ -1,0 +1,25 @@
+# Rongle CNN Training Pipeline Dependencies
+# Install: pip install -r training/requirements.txt
+
+# Core training
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Image processing
+opencv-python-headless>=4.8.0
+Pillow>=10.0.0
+
+# Data handling
+numpy>=1.24.0
+
+# VLM labeling (uses same key as portal)
+google-genai>=1.0.0
+aiohttp>=3.9.0
+
+# Export pipeline (PyTorch -> ONNX -> TF.js)
+onnx>=1.14.0
+onnxruntime>=1.16.0
+tensorflowjs>=4.10.0
+
+# Utilities
+tqdm>=4.65.0
