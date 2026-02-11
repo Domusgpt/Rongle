@@ -152,3 +152,6 @@ hash_N = SHA256( timestamp_N | action_N | screenshot_hash_N | hash_{N-1} )
 8. **Use hardware emergency stop** on Pi deployments. Software-only is a development convenience.
 9. **Rotate device API keys** periodically.
 10. **Run portal with rate limiting tuned** to expected device count.
+
+---
+[Back to Documentation Index](INDEX.md)

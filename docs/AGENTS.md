@@ -86,3 +86,6 @@ The `training/` directory contains tools to fine-tune the local CNN.
 | **Auth Failure (401)** | Invalid/Expired Device Key. | Regenerate key in Portal UI and update `settings.json`. |
 | **Mouse Drifting** | Servoing failed or calibration off. | Re-run calibration step. Check lighting conditions. |
 | **Slow Response** | VLM Latency high. | Check `OPERATIONAL_METRICS.md` targets. Switch to faster model. |
+
+---
+[Back to Documentation Index](INDEX.md)

@@ -80,3 +80,6 @@ The audit log is stored at `/mnt/secure/audit.jsonl`. If this is just a folder o
 **Recommendation:**
 - Prioritize training a quantized MobileNet-SSD.
 - Integrate `onnxruntime` to run the model.
+
+---
+[Back to Documentation Index](INDEX.md)

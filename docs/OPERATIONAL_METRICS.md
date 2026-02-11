@@ -45,3 +45,6 @@ Run `scripts/analyze_logs.py` (to be implemented) on local `audit.jsonl` files.
 1.  **Ingestion:** `PortalClient` batches logs to Portal.
 2.  **Storage:** Portal writes to PostgreSQL (metadata) and S3/Blob (screenshots).
 3.  **Visualization:** Grafana dashboard connected to Portal DB.
+
+---
+[Back to Documentation Index](INDEX.md)

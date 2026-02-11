@@ -338,3 +338,6 @@ Browser ──► navigator.clipboard.writeText() ──► user pastes manually
 | Audit | Merkle hash chain | Tamper-evident without blockchain overhead |
 | HID protocol | USB HID over OTG / CH9329 | Universal compatibility, no target drivers needed |
 | Serial protocol | Web Serial API | Browser-native, no native app required |
+
+---
+[Back to Documentation Index](INDEX.md)

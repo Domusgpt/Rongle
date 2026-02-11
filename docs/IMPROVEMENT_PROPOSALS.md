@@ -108,3 +108,6 @@ class FastDetector:
         # Postprocess: NMS
         pass
 ```
+
+---
+[Back to Documentation Index](INDEX.md)
