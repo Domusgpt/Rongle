@@ -379,12 +379,12 @@ export default function App() {
 
   // Status Badge Helper
   const getStatusBadge = () => {
-    const baseClasses = "px-3 py-1 rounded-full text-xs font-bold tracking-wider";
+    const baseClasses = "px-3 py-1 rounded-full text-xs font-bold tracking-wider flex items-center gap-1";
     switch (status) {
       case AgentStatus.IDLE: return <span className={`${baseClasses} bg-gray-700 text-gray-300`}>IDLE</span>;
       case AgentStatus.PERCEIVING: return <span className={`${baseClasses} bg-purple-900 text-purple-200 animate-pulse`}>WATCHING</span>;
       case AgentStatus.PLANNING: return <span className={`${baseClasses} bg-terminal-amber/20 text-terminal-amber animate-pulse`}>PLANNING</span>;
-      case AgentStatus.ACTING: return <span className={`${baseClasses} bg-terminal-blue/20 text-terminal-blue`}>GENERATING</span>;
+      case AgentStatus.ACTING: return <span className={`${baseClasses} bg-terminal-blue/20 text-terminal-blue`}>ACTING</span>;
       case AgentStatus.VERIFYING: return <span className={`${baseClasses} bg-terminal-green/20 text-terminal-green`}>VERIFYING</span>;
       case AgentStatus.STOPPED: return <span className={`${baseClasses} bg-terminal-red text-white`}>STOPPED</span>;
       case AgentStatus.ERROR: return <span className={`${baseClasses} bg-red-900 text-red-200`}>ERROR</span>;
@@ -448,10 +448,10 @@ export default function App() {
             </div>
             <button
               onClick={handleEmergencyStop}
-              className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/50 px-3 py-2 rounded flex items-center gap-2 transition-all font-bold text-xs sm:text-sm"
+              className="bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-500/20 px-4 py-2 rounded-full flex items-center gap-2 transition-all font-bold text-xs sm:text-sm uppercase tracking-wide border-2 border-red-400"
             >
-              <Power size={16} />
-              <span className="hidden sm:inline">ESTOP</span>
+              <Power size={16} className="animate-pulse" />
+              <span className="hidden sm:inline">Emergency Stop</span>
             </button>
           </div>
         </div>
