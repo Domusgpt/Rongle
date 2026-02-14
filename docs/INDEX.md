@@ -40,6 +40,9 @@ Welcome to the central knowledge repository for the Rongle Agentic Operator.
 *   **[Contributing Guide](../CONTRIBUTING.md)**: Code standards and workflow.
 *   **[Onboarding](../ONBOARDING.md)**: New developer setup guide.
 
+### 📸 Project History
+*   **[Manifest 2026-02-09](PROJECT_MANIFEST_2026-02-09.md)**: Comprehensive snapshot of the system state, architecture, and file structure as of RC1.
+
 ---
 
 ## 🔍 Index
