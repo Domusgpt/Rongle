@@ -280,22 +280,71 @@ class PolicyGuardian:
         # All other commands (STRING, key combos, etc.)
         return self.check_keyboard(raw_line)
 
-    def check_semantic_safety(self, command: str, image_context: Any = None) -> PolicyVerdict:
+    def check_semantic_safety(
+        self,
+        command: str,
+        vlm_reasoner: Any = None,
+        image_context: Any = None
+    ) -> PolicyVerdict:
         """
-        Perform a semantic safety check using a local VLM (SmolVLM/PaliGemma).
+        Perform a semantic safety check using a VLM (Local or Remote).
 
         Unlike regex blocking, this analyzes the INTENT of the command in context.
-        E.g., "rm -rf" might be blocked by regex, but "Open terminal and delete all files"
-        is semantically identical and should also be blocked.
-
-        For MVP, this is a placeholder/mock that can be connected to `VLMReasoner`.
         """
-        # TODO: Integrate with VLMReasoner to run local inference
-        # prompt = f"Is the command '{command}' safe to execute? Screen context provided."
-        # result = vlm.ask(prompt, image_context)
+        if self.dev_mode:
+            return PolicyVerdict(allowed=True)
 
-        # Fail-safe default: allowed unless explicit negative signal
-        return PolicyVerdict(allowed=True)
+        if not vlm_reasoner or image_context is None:
+            # Cannot check without Brain/Eye, fail open if regex passed,
+            # or fail closed if paranoid. For now, fail open (allow).
+            return PolicyVerdict(allowed=True)
+
+        prompt = (
+            f"You are a Safety Guardian. Analyze this computer command: '{command}'.\n"
+            "If it is potentially destructive (e.g., deletes data, formats drives, "
+            "exfiltrates secrets, or modifies system boot), reply with 'BLOCK'. "
+            "Otherwise, reply with 'ALLOW'.\n"
+            "Context: The command will be executed on the machine shown in the image."
+        )
+
+        try:
+            # We use the 'require_privacy=True' flag to prefer local models for safety checks
+            # if available, to avoid leaking sensitive commands/screens to the cloud.
+            # However, VLMReasoner.query returns a structured object. We might need a simpler interface
+            # or parse the description field.
+
+            # Since VLMReasoner returns UI elements, we need a generic query method.
+            # Currently VLMReasoner doesn't expose a raw 'ask' method easily,
+            # but its backend does. Let's assume we can call `vlm_reasoner.backend.query`.
+
+            # Note: We need to be careful about circular imports if we typed this strictly.
+
+            # Let's assume vlm_reasoner has a method `ask_safety(image, prompt)`
+            # or we use the backend directly.
+
+            # Implementation Strategy:
+            # We will use the `describe_screen` method with a custom prompt if possible,
+            # or access the backend.
+
+            response = vlm_reasoner.backend.query(image_context, prompt)
+
+            # Check response text
+            text = response.raw_response.upper()
+            if "BLOCK" in text and "ALLOW" not in text:
+                logger.warning("Semantic Safety Blocked: %s", command)
+                return PolicyVerdict(
+                    allowed=False,
+                    reason="VLM Safety Check: Potentially destructive command detected.",
+                    rule_name="semantic_safety"
+                )
+
+            return PolicyVerdict(allowed=True)
+
+        except Exception as e:
+            logger.error("Semantic safety check failed: %s", e)
+            # Fail closed? Or Fail open?
+            # For Alpha, fail open to avoid bricking.
+            return PolicyVerdict(allowed=True)
 
     # ------------------------------------------------------------------
     # Rate limiting

@@ -1,8 +1,8 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { ActionLog } from '../../components/ActionLog';
-import { LogLevel } from '../../types';
+import { ActionLog } from '../../src/components/ActionLog';
+import { LogLevel } from '../../src/types';
 
 // Mock scrollIntoView
 window.HTMLElement.prototype.scrollIntoView = vi.fn();

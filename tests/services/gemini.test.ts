@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { analyzeScreenFrame } from '../../services/gemini';
+import { analyzeScreenFrame } from '../../src/services/gemini';
 
 // Mock the GoogleGenAI client
 const { mockGenerateContent } = vi.hoisted(() => {
