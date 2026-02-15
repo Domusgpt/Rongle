@@ -64,7 +64,7 @@ const INITIAL_CONFIG: AgentConfig = {
   maxRetries: 3,
   pollIntervalMs: 3000,
   annotationsEnabled: true,
-  useLLMProxy: false,
+  useLLMProxy: true, // Mandated by security policy
 };
 
 // ---------------------------------------------------------------------------
@@ -391,15 +391,12 @@ export default function App() {
     }
   };
 
-  // Show auth gate if not authenticated and user hasn't skipped
+  // Show auth gate if not authenticated (Mandatory Proxy Mode)
   if (showAuth && !authState.isAuthenticated) {
     return (
       <AuthGate
         onAuth={handleAuth}
-        onSkip={() => {
-          setShowAuth(false);
-          addLog(LogLevel.INFO, "Running in Direct Mode (no portal)");
-        }}
+        // onSkip removed to enforce Portal Authentication
       />
     );
   }
@@ -760,54 +757,7 @@ export default function App() {
                     color="bg-purple-500" />
                 )}
 
-                {/* API Key input for direct mode */}
-                {!config.useLLMProxy && (
-                  <div className="p-2 rounded bg-industrial-900/50 border border-industrial-700/50">
-                    <div className="flex items-center gap-2 mb-2">
-                      <KeyRound size={12} className={hasApiKey ? 'text-terminal-green' : 'text-gray-500'} />
-                      <span className="text-xs text-gray-400">
-                        Gemini API Key {hasApiKey ? '(configured)' : '(required for direct mode)'}
-                      </span>
-                    </div>
-                    <div className="flex gap-1">
-                      <input
-                        type="password"
-                        value={apiKeyInput}
-                        onChange={(e) => setApiKeyInput(e.target.value)}
-                        placeholder={hasApiKey ? '••••••••' : 'Enter API key'}
-                        className="flex-1 bg-black border border-industrial-600 rounded px-2 py-1 text-xs font-mono text-white focus:outline-none focus:border-terminal-blue"
-                      />
-                      <button
-                        onClick={() => {
-                          if (apiKeyInput.trim()) {
-                            setGeminiApiKey(apiKeyInput.trim());
-                            setHasApiKey(true);
-                            setApiKeyInput('');
-                            addLog(LogLevel.SUCCESS, 'Gemini API key configured (session only)');
-                          }
-                        }}
-                        className="px-2 py-1 text-xs font-bold bg-terminal-green/20 text-terminal-green rounded hover:bg-terminal-green/30"
-                      >
-                        Set
-                      </button>
-                      {hasApiKey && (
-                        <button
-                          onClick={() => {
-                            clearGeminiApiKey();
-                            setHasApiKey(false);
-                            addLog(LogLevel.INFO, 'Gemini API key cleared');
-                          }}
-                          className="px-2 py-1 text-xs font-bold bg-terminal-red/20 text-terminal-red rounded hover:bg-terminal-red/30"
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-[9px] text-gray-600 mt-1 font-mono">
-                      Stored in sessionStorage only — cleared on tab close
-                    </p>
-                  </div>
-                )}
+                {/* API Key input removed - Portal Proxy Mandated */}
               </div>
             </div>
 

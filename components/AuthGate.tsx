@@ -5,7 +5,7 @@ import { LogIn, UserPlus, Wifi, WifiOff, Eye, EyeOff } from 'lucide-react';
 
 interface AuthGateProps {
   onAuth: (state: AuthState) => void;
-  onSkip: () => void;
+  onSkip?: () => void;
 }
 
 export const AuthGate: React.FC<AuthGateProps> = ({ onAuth, onSkip }) => {
@@ -169,15 +169,19 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuth, onSkip }) => {
         </div>
 
         {/* Skip / offline mode */}
-        <button
-          onClick={onSkip}
-          className="w-full mt-4 py-3 text-sm text-gray-500 hover:text-gray-300 font-mono flex items-center justify-center gap-2 transition-colors"
-        >
-          <WifiOff size={14} /> Continue in Direct Mode (no portal)
-        </button>
-        <p className="text-center text-xs text-gray-600 mt-2">
-          Direct mode uses your Gemini API key locally. No account, billing, or device sync.
-        </p>
+        {onSkip && (
+          <>
+            <button
+              onClick={onSkip}
+              className="w-full mt-4 py-3 text-sm text-gray-500 hover:text-gray-300 font-mono flex items-center justify-center gap-2 transition-colors"
+            >
+              <WifiOff size={14} /> Continue in Direct Mode (no portal)
+            </button>
+            <p className="text-center text-xs text-gray-600 mt-2">
+              Direct mode uses your Gemini API key locally. No account, billing, or device sync.
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

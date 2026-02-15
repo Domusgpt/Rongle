@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -22,5 +23,12 @@ export default defineConfig({
     rollupOptions: {
       external: ['@tensorflow/tfjs'],
     },
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './setupTests.ts',
+    css: true,
+    exclude: ['**/tests/e2e/**', '**/node_modules/**'], // Exclude Playwright tests from Vitest
   },
 });

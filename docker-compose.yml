@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: rongle
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: rongle_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rongle"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  portal:
+    build:
+      context: .
+      dockerfile: portal/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://rongle:password@db:5432/rongle_db
+      - REDIS_URL=redis://redis:6379/0
+      - ALLOWED_ORIGINS=http://localhost:5173
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./portal:/app/portal:ro
+
+  operator:
+    build:
+      context: .
+      dockerfile: rongle_operator/Dockerfile
+    environment:
+      - RONGLE_DRY_RUN=true
+      # If operator needs to talk to portal or redis
+      - REDIS_URL=redis://redis:6379/0
+      # Mount USB devices if needed (commented out for safety/portability)
+      # devices:
+      #   - /dev/hidg0:/dev/hidg0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./rongle_operator:/app/rongle_operator:ro
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -313,3 +313,6 @@ WantedBy=multi-user.target
 | VLM returns low confidence | Poor camera angle or glare | Adjust phone position. Reduce ambient light reflections on monitor. |
 | CNN shows 0 detections | Random weights (no trained model) | Expected without pre-trained weights. Load trained model via `loadModelFromURL()`. |
 | Rate limit 429 | Too many requests | Wait for window reset (60 seconds) or increase `RATE_LIMIT_PER_MINUTE`. |
+
+---
+[Back to Documentation Index](INDEX.md)
