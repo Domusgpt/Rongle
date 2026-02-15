@@ -1,9 +1,50 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { VisionAnalysisResult } from "../types";
 
-// Initialize the client
-// The API key must be obtained exclusively from the environment variable process.env.API_KEY
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// ---------------------------------------------------------------------------
+// Runtime API key management (NEVER baked into the bundle)
+// ---------------------------------------------------------------------------
+const STORAGE_KEY = 'rongle_gemini_key';
+
+let _cachedClient: InstanceType<typeof GoogleGenAI> | null = null;
+
+/** Store the API key in sessionStorage (cleared on tab close). */
+export function setGeminiApiKey(key: string): void {
+  sessionStorage.setItem(STORAGE_KEY, key);
+  _cachedClient = null; // Force re-creation
+}
+
+/** Get the current API key (from sessionStorage). */
+export function getGeminiApiKey(): string | null {
+  return sessionStorage.getItem(STORAGE_KEY);
+}
+
+/** Check if a Gemini API key is configured. */
+export function hasGeminiApiKey(): boolean {
+  return !!sessionStorage.getItem(STORAGE_KEY);
+}
+
+/** Clear the stored API key. */
+export function clearGeminiApiKey(): void {
+  sessionStorage.removeItem(STORAGE_KEY);
+  _cachedClient = null;
+}
+
+function getClient(): GoogleGenAI {
+  if (_cachedClient) return _cachedClient;
+
+  // Test environment bypass
+  if (import.meta.env.MODE === 'test') {
+      // @ts-ignore
+      _cachedClient = new GoogleGenAI({ apiKey: 'test-key' });
+      return _cachedClient;
+  }
+
+  const key = getGeminiApiKey();
+  if (!key) throw new Error('No Gemini API key configured. Enter your key in Settings or use Portal mode.');
+  _cachedClient = new GoogleGenAI({ apiKey: key });
+  return _cachedClient;
+}
 
 export const analyzeScreenFrame = async (
   base64Image: string,
@@ -30,7 +71,7 @@ export const analyzeScreenFrame = async (
       Return the response in JSON format.
     `;
 
-    const response = await ai.models.generateContent({
+    const response = await getClient().models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
         parts: [

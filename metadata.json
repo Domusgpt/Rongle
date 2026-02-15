@@ -1,6 +1,6 @@
 {
-  "name": "Copy of Sentient KVM - Mobile Agent",
-  "description": "Android-optimized AI agent that uses the phone's camera to analyze screens and generate Ducky Script payloads for HID injection.",
+  "name": "Rongle — Agentic Operator",
+  "description": "Hardware-isolated agentic operator that physically controls computers through AI vision and USB HID injection, from Android or Raspberry Pi.",
   "requestFramePermissions": [
     "camera",
     "microphone"

@@ -11,6 +11,23 @@ node_modules
 dist
 dist-ssr
 *.local
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Android build artifacts
+android/app/build/
+android/.gradle/
+android/build/
+android/local.properties
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+
+# Training data and checkpoints
+training/datasets/
+training/checkpoints/
+training/*.pt
+training/*.onnx
 
 # Editor directories and files
 .vscode/*
