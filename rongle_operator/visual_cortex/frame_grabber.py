@@ -7,6 +7,7 @@ Provides both single-shot capture and continuous streaming modes.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import threading
@@ -82,6 +83,10 @@ class FrameGrabber:
         self._running = False
         self._thread: threading.Thread | None = None
 
+        # Async support
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._frame_event: asyncio.Event | None = None
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -155,10 +160,15 @@ class FrameGrabber:
     # ------------------------------------------------------------------
     # Continuous capture (background thread)
     # ------------------------------------------------------------------
-    def start_streaming(self) -> None:
+    def start_streaming(self, loop: asyncio.AbstractEventLoop | None = None) -> None:
         """Start capturing frames in a background thread."""
         if self._cap is None:
             self.open()
+
+        self._loop = loop
+        if self._loop:
+            self._frame_event = asyncio.Event()
+
         self._running = True
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
@@ -168,6 +178,20 @@ class FrameGrabber:
         with self._lock:
             return self._latest_frame
 
+    async def wait_for_frame(self) -> CapturedFrame:
+        """Wait for the next frame asynchronously."""
+        if not self._frame_event:
+            raise RuntimeError("Streaming not configured for asyncio (pass loop to start_streaming)")
+
+        await self._frame_event.wait()
+        self._frame_event.clear()
+
+        frame = self.get_latest()
+        if frame is None:
+             # Should not happen if event was set, but just in case
+             raise RuntimeError("Event set but no frame available")
+        return frame
+
     def _capture_loop(self) -> None:
         interval = 1.0 / self.fps
         while self._running:
@@ -175,6 +199,10 @@ class FrameGrabber:
                 frame = self.grab()
                 with self._lock:
                     self._latest_frame = frame
+
+                if self._loop and self._frame_event:
+                    self._loop.call_soon_threadsafe(self._frame_event.set)
+
             except RuntimeError as exc:
                 logger.warning("Frame grab error: %s", exc)
             time.sleep(interval)
