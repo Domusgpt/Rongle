@@ -276,4 +276,5 @@ export class PortalAPI {
 }
 
 // Singleton instance
-export const portalAPI = new PortalAPI();
+export const api = new PortalAPI();
+export const portalAPI = api;
