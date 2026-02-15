@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 import os
 import json
 import logging
+import re
 from dataclasses import dataclass
 
 logger = logging.getLogger("translator")
@@ -20,16 +21,28 @@ class TranslationRequest:
     history: List[str]  # Previous actions
 
 class AgenticDuckyTranslator:
-    def __init__(self, backend="mock"):
+    def __init__(self, backend="mock", api_key: Optional[str] = None):
         self.backend = backend
-        # In a real impl, we'd initialize the API client here.
-        # self.client = Anthropic() or GoogleGenAI()
+        self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
+
+        if self.backend == "gemini":
+            if not self.api_key:
+                logger.warning("Gemini backend requested but no API Key found. Falling back to mock.")
+                self.backend = "mock"
+            else:
+                try:
+                    from google import genai
+                    self.client = genai.Client(api_key=self.api_key)
+                    self.model_id = "gemini-2.0-flash"
+                except ImportError:
+                    logger.error("google-genai library not installed. Falling back to mock.")
+                    self.backend = "mock"
 
     def translate(self, request: TranslationRequest) -> List[str]:
         """
         Convert natural language intent to Ducky Script.
         """
-        logger.info(f"Translating intent: '{request.intent}'")
+        logger.info(f"Translating intent: '{request.intent}' via {self.backend}")
 
         # Construct Prompt for the LLM
         prompt = self._build_prompt(request)
@@ -45,15 +58,22 @@ class AgenticDuckyTranslator:
         You are an expert Ducky Script automation engineer.
         Your task is to generate Ducky Script commands to achieve the user's intent.
 
+        System Context:
+        - Screen Size: 1920x1080 (assumed unless specified in state)
+        - Available Commands: MOUSE_MOVE x y, MOUSE_CLICK LEFT/RIGHT, STRING text, DELAY ms, ENTER, ALT F4
+
         Current System State:
         {request.sandbox_state}
 
-        History:
+        Action History:
         {json.dumps(request.history, indent=2)}
 
         User Intent: "{request.intent}"
 
-        Output valid Ducky Script only.
+        Instructions:
+        1. Analyze the 'Current System State' to find coordinates of UI elements mentioned in the intent.
+        2. Generate a sequence of Ducky Script commands.
+        3. Output ONLY the raw Ducky Script commands, one per line. No markdown formatting, no explanations.
         """
 
     def _mock_translation(self, request: TranslationRequest) -> List[str]:
@@ -61,9 +81,6 @@ class AgenticDuckyTranslator:
         intent = request.intent.lower()
 
         if "open browser" in intent:
-            # Find browser icon coordinates from state string or assume known
-            # In a real LLM call, it would parse the state description.
-            # Here we hardcode for the sandbox default layout.
             return [
                 "MOUSE_MOVE 80 80", # Center of icon (50,50 60x60) -> 80,80
                 "MOUSE_CLICK LEFT",
@@ -84,7 +101,31 @@ class AgenticDuckyTranslator:
         return []
 
     def _call_llm(self, prompt: str) -> List[str]:
-        # Placeholder for actual API call
-        # response = client.generate(prompt)
-        # return response.text.split("\n")
-        return []
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=prompt
+            )
+
+            raw_text = response.text
+
+            # Clean up response (remove markdown code blocks if present)
+            # The prompt asks for raw text, but LLMs often add ```ducky ... ```
+            cleaned_lines = []
+
+            # Simple regex to strip code blocks
+            code_block_pattern = r"```(?:ducky)?\n(.*?)```"
+            match = re.search(code_block_pattern, raw_text, re.DOTALL)
+            if match:
+                raw_text = match.group(1)
+
+            for line in raw_text.splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    cleaned_lines.append(line)
+
+            return cleaned_lines
+
+        except Exception as e:
+            logger.error(f"LLM Call Failed: {e}")
+            return []

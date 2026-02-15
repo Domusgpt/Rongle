@@ -10,6 +10,7 @@ This test:
 
 import unittest
 import logging
+import os
 from rongle_operator.sandbox.ducky_sandbox import DuckySandbox
 from rongle_operator.sandbox.translator import AgenticDuckyTranslator, TranslationRequest
 
@@ -19,7 +20,10 @@ logger = logging.getLogger("test_evolution")
 class TestDuckyEvolution(unittest.TestCase):
     def setUp(self):
         self.sandbox = DuckySandbox()
-        self.translator = AgenticDuckyTranslator(backend="mock")
+        # Use real backend if key is present, else mock
+        backend = "gemini" if os.environ.get("GEMINI_API_KEY") else "mock"
+        logger.info(f"Testing with backend: {backend}")
+        self.translator = AgenticDuckyTranslator(backend=backend)
 
     def test_open_browser_flow(self):
         logger.info("=== TEST: Open Browser ===")

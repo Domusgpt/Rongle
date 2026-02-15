@@ -16,6 +16,18 @@ The `training/` directory contains a complete pipeline to:
 pip install -r training/requirements.txt
 ```
 
+## Why Cloud Compute?
+
+Training a Convolutional Neural Network (CNN) like MobileNet-SSD is computationally intensive.
+*   **Inference (Edge)**: Running the model to detect objects takes ~10-30ms on a CPU (Pi/Android).
+*   **Training (Cloud)**: Teaching the model requires processing thousands of images millions of times. On a Raspberry Pi CPU, this would take **weeks**. On a Cloud GPU (like NVIDIA T4/A10G), it takes **minutes to hours**.
+
+Therefore, the workflow is:
+1.  **Collect Data** on the Edge Device.
+2.  **Upload Data** to a powerful machine (Cloud or Dev PC with GPU).
+3.  **Train** the model.
+4.  **Download** the `.onnx` file back to the Edge Device.
+
 ## Workflow
 
 ### 1. Data Collection
