@@ -26,11 +26,24 @@ An AI-powered bridge that translates human intent into Ducky Script.
 
 ## Usage
 
+### Configuration
+To use the real Agentic Translator (Gemini-powered), you must set the API key:
+
+```bash
+export GEMINI_API_KEY="your_api_key_here"
+```
+
+If this key is missing, the system falls back to a **Mock Backend** (hardcoded rules) for testing.
+
 ### Running Tests
 The sandbox is verified via integration tests:
 
 ```bash
+# Run with Mock Backend (Default)
 python3 tests/test_ducky_evolution.py
+
+# Run with Real Gemini Backend
+GEMINI_API_KEY="AIza..." python3 tests/test_ducky_evolution.py
 ```
 
 ### Extending the Sandbox
