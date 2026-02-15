@@ -2,6 +2,8 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+/// <reference types="vitest" />
+
 // SECURITY: API keys are NOT baked into the frontend bundle.
 // In direct mode, the user enters their key at runtime (stored in sessionStorage).
 // In portal mode, the server holds the key and proxies all VLM requests.
@@ -22,5 +24,10 @@ export default defineConfig({
     rollupOptions: {
       external: ['@tensorflow/tfjs'],
     },
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './tests/setup.ts',
   },
 });

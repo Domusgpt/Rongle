@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  portal:
+    build:
+      context: .
+      dockerfile: portal/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://rongle:rongle@postgres:5432/rongle
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=dev_secret_key_change_me
+    depends_on:
+      - postgres
+      - redis
+
+  operator:
+    build:
+      context: .
+      dockerfile: rng_operator/Dockerfile
+    # Privileged mode required for direct hardware access (/dev/video0, /dev/hidg*)
+    privileged: true
+    volumes:
+      - /dev/video0:/dev/video0
+      # - /dev/hidg0:/dev/hidg0 # Uncomment on actual hardware
+      # - /dev/hidg1:/dev/hidg1
+    environment:
+      - VITE_PORTAL_URL=http://portal:8000
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    command: ["python", "-m", "rng_operator.main", "--dry-run", "--software-estop"] # Default safe mode
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=rongle
+      - POSTGRES_PASSWORD=rongle
+      - POSTGRES_DB=rongle
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+
+volumes:
+  postgres_data:

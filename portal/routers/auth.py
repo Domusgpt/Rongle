@@ -42,6 +42,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
         display_name=body.display_name or body.email.split("@")[0],
     )
     db.add(user)
+    await db.flush()  # Ensure ID is generated
 
     # Create default free-tier subscription
     sub = Subscription(user_id=user.id, tier="free", llm_quota_monthly=100, max_devices=1)
