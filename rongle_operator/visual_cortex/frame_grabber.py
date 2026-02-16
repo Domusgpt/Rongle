@@ -1,5 +1,5 @@
 """
-FrameGrabber — Captures frames from the HDMI-to-CSI bridge at /dev/video0.
+FrameGrabber — Captures frames from the HDMI-to-CSI bridge at /dev/video0 OR WebRTC source.
 
 Uses Video4Linux2 (v4l2) via OpenCV to read from the capture device.
 Provides both single-shot capture and continuous streaming modes.
@@ -7,11 +7,13 @@ Provides both single-shot capture and continuous streaming modes.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import threading
 import time
 from dataclasses import dataclass
+from typing import Any, Optional
 
 import cv2
 import numpy as np
@@ -49,7 +51,7 @@ class CapturedFrame:
 
 class FrameGrabber:
     """
-    Continuous frame capture from a V4L2 device.
+    Continuous frame capture from a V4L2 device or WebRTC receiver.
 
     Parameters
     ----------
@@ -61,6 +63,8 @@ class FrameGrabber:
         Capture height in pixels.
     fps : int
         Desired capture frame rate.
+    receiver : WebRTCReceiver | None
+        Optional WebRTC receiver source. If provided, 'device' is ignored.
     """
 
     def __init__(
@@ -69,11 +73,13 @@ class FrameGrabber:
         width: int = 1920,
         height: int = 1080,
         fps: int = 30,
+        receiver: Any | None = None,
     ) -> None:
         self.device = device
         self.width = width
         self.height = height
         self.fps = fps
+        self.receiver = receiver
 
         self._cap: cv2.VideoCapture | None = None
         self._lock = threading.Lock()
@@ -82,11 +88,19 @@ class FrameGrabber:
         self._running = False
         self._thread: threading.Thread | None = None
 
+        # Async support
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._frame_event: asyncio.Event | None = None
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
     def open(self) -> None:
         """Open the capture device."""
+        if self.receiver:
+            logger.info("FrameGrabber using WebRTC receiver source")
+            return
+
         # Check if device is a network URL (IP Webcam) or local device
         if isinstance(self.device, str) and (self.device.startswith("http") or self.device.startswith("rtsp")):
             logger.info("Opening network stream: %s", self.device)
@@ -134,6 +148,23 @@ class FrameGrabber:
     # ------------------------------------------------------------------
     def grab(self) -> CapturedFrame:
         """Capture and return a single frame (blocking)."""
+        if self.receiver:
+            # Sync grab from receiver (polling latest)
+            img, ts, seq = self.receiver.get_latest_frame()
+            if img is None:
+                # If no frame yet, wait briefly? or raise?
+                # For compatibility with polling loops, we might sleep and retry?
+                # But grab() usually blocks.
+                # Since receiver is async populated, we can't easily block here without loop.
+                # Just raise or return None (but return type is CapturedFrame).
+                # We'll rely on the caller handling exceptions or retrying.
+                raise RuntimeError("No WebRTC frame available yet")
+
+            # Use receiver's sequence or maintain our own? Receiver has one.
+            # Hash
+            frame_hash = hashlib.sha256(img.tobytes()).hexdigest()
+            return CapturedFrame(image=img, timestamp=ts, sequence=seq, sha256=frame_hash)
+
         if self._cap is None or not self._cap.isOpened():
             raise RuntimeError("FrameGrabber not opened")
 
@@ -155,18 +186,58 @@ class FrameGrabber:
     # ------------------------------------------------------------------
     # Continuous capture (background thread)
     # ------------------------------------------------------------------
-    def start_streaming(self) -> None:
+    def start_streaming(self, loop: asyncio.AbstractEventLoop | None = None) -> None:
         """Start capturing frames in a background thread."""
+        self._loop = loop
+
+        if self.receiver:
+            # No thread needed, receiver pushes frames via async mechanism.
+            # But wait_for_frame needs to work.
+            # Receiver has its own event.
+            # We don't need to do anything here except maybe ensure receiver is ready.
+            return
+
         if self._cap is None:
             self.open()
+
+        if self._loop:
+            self._frame_event = asyncio.Event()
+
         self._running = True
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
 
     def get_latest(self) -> CapturedFrame | None:
         """Return the most recently captured frame (thread-safe)."""
+        if self.receiver:
+             img, ts, seq = self.receiver.get_latest_frame()
+             if img is None: return None
+             frame_hash = hashlib.sha256(img.tobytes()).hexdigest()
+             return CapturedFrame(image=img, timestamp=ts, sequence=seq, sha256=frame_hash)
+
         with self._lock:
             return self._latest_frame
+
+    async def wait_for_frame(self) -> CapturedFrame:
+        """Wait for the next frame asynchronously."""
+        if self.receiver:
+            # Delegate to receiver
+            img, ts, seq = await self.receiver.wait_for_frame()
+            if img is None:
+                 raise RuntimeError("WebRTC frame waiter returned None")
+            frame_hash = hashlib.sha256(img.tobytes()).hexdigest()
+            return CapturedFrame(image=img, timestamp=ts, sequence=seq, sha256=frame_hash)
+
+        if not self._frame_event:
+            raise RuntimeError("Streaming not configured for asyncio (pass loop to start_streaming)")
+
+        await self._frame_event.wait()
+        self._frame_event.clear()
+
+        frame = self.get_latest()
+        if frame is None:
+             raise RuntimeError("Event set but no frame available")
+        return frame
 
     def _capture_loop(self) -> None:
         interval = 1.0 / self.fps
@@ -175,6 +246,10 @@ class FrameGrabber:
                 frame = self.grab()
                 with self._lock:
                     self._latest_frame = frame
+
+                if self._loop and self._frame_event:
+                    self._loop.call_soon_threadsafe(self._frame_event.set)
+
             except RuntimeError as exc:
                 logger.warning("Frame grab error: %s", exc)
             time.sleep(interval)
