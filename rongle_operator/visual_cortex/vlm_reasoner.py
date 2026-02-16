@@ -11,7 +11,6 @@ Supports two backends:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import base64
 import logging
@@ -61,7 +60,7 @@ class VLMBackend(ABC):
     """Abstract interface for VLM inference backends."""
 
     @abstractmethod
-    async def query(self, frame: np.ndarray, prompt: str) -> VLMResponse:
+    def query(self, frame: np.ndarray, prompt: str) -> VLMResponse:
         """Send a frame + prompt and return structured UI element data."""
         ...
 
@@ -86,12 +85,7 @@ class GeminiBackend(VLMBackend):
             from google import genai  # type: ignore[import-untyped]
             self._client = genai.Client(api_key=self.api_key)
 
-    async def query(self, frame: np.ndarray, prompt: str) -> VLMResponse:
-        """Async wrapper for the synchronous Gemini call."""
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._query_sync, frame, prompt)
-
-    def _query_sync(self, frame: np.ndarray, prompt: str) -> VLMResponse:
+    def query(self, frame: np.ndarray, prompt: str) -> VLMResponse:
         import time
         self._ensure_client()
         from google.genai import types  # type: ignore[import-untyped]
@@ -196,12 +190,7 @@ class LocalVLMBackend(VLMBackend):
             logger.error("Failed to load local VLM: %s", exc)
             raise
 
-    async def query(self, frame: np.ndarray, prompt: str) -> VLMResponse:
-        """Async wrapper for the local VLM inference."""
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._query_sync, frame, prompt)
-
-    def _query_sync(self, frame: np.ndarray, prompt: str) -> VLMResponse:
+    def query(self, frame: np.ndarray, prompt: str) -> VLMResponse:
         import time
         from PIL import Image  # type: ignore
 
@@ -260,15 +249,15 @@ class VLMReasoner:
     Usage::
 
         reasoner = VLMReasoner(backend=GeminiBackend(api_key="..."))
-        elements = await reasoner.find_element(frame, "the Connect button")
+        elements = reasoner.find_element(frame, "the Connect button")
     """
 
     def __init__(self, backend: VLMBackend) -> None:
         self.backend = backend
 
-    async def find_element(self, frame: np.ndarray, description: str) -> UIElement | None:
+    def find_element(self, frame: np.ndarray, description: str) -> UIElement | None:
         """Find a single UI element matching the natural-language description."""
-        response = await self.backend.query(frame, description)
+        response = self.backend.query(frame, description)
         if not response.elements:
             logger.info("VLM found no elements for: %s", description)
             return None
@@ -280,12 +269,12 @@ class VLMReasoner:
         )
         return best
 
-    async def find_all_elements(self, frame: np.ndarray, description: str) -> list[UIElement]:
+    def find_all_elements(self, frame: np.ndarray, description: str) -> list[UIElement]:
         """Find all UI elements matching the description."""
-        response = await self.backend.query(frame, description)
+        response = self.backend.query(frame, description)
         return response.elements
 
-    async def describe_screen(self, frame: np.ndarray) -> str:
+    def describe_screen(self, frame: np.ndarray) -> str:
         """Get a natural-language description of the current screen state."""
-        response = await self.backend.query(frame, "Describe what is shown on this screen.")
+        response = self.backend.query(frame, "Describe what is shown on this screen.")
         return response.description
