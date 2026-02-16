@@ -361,6 +361,7 @@ async def main_async() -> None:
              goal = current_session.goal
     else:
         if not goal:
+            # Interactive prompt (blocking, but at startup is fine)
             goal = input("Enter agent goal: ").strip()
 
         if not goal:
