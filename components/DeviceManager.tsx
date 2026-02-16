@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import type { PortalDevice, Subscription } from '../types';
+import React, { useState, useEffect, useCallback } from 'react';
+import type { PortalDevice, Subscription, UsageStats } from '../types';
 import { TIER_INFO } from '../types';
 import { portalAPI } from '../services/portal-api';
 import {
@@ -18,7 +18,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
 }) => {
   const [devices, setDevices] = useState<PortalDevice[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [usage, setUsage] = useState<any>(null);
+  const [usage, setUsage] = useState<UsageStats | null>(null);
   const [newDeviceName, setNewDeviceName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -80,10 +80,22 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
     try {
       const updated = await portalAPI.regenerateDeviceKey(id);
       setDevices(prev => prev.map(d => d.id === id ? updated : d));
+      // If the selected device key was regenerated, we might need to update it
+      if (selectedDeviceId === id) {
+        onSelectDevice(updated);
+      }
     } catch (err: any) {
       setError(err.message);
     }
   };
+
+  const handleManualSend = useCallback(() => {
+    if (!manualCmd.trim() || !selectedDeviceId) return;
+    console.log(`[DeviceManager] Sending manual command to ${selectedDeviceId}: ${manualCmd}`);
+    // In a full implementation, this would send via WebSocket
+    // For now, we'll just clear the input
+    setManualCmd('');
+  }, [manualCmd, selectedDeviceId]);
 
   const tierInfo = subscription ? TIER_INFO[subscription.tier] : TIER_INFO.free;
   const quotaPercent = subscription && subscription.llm_quota_monthly > 0
@@ -257,39 +269,44 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
 
       {/* Telemetry & Control Section */}
       {selectedDeviceId && (
-      <div className="bg-industrial-800 rounded-xl border border-industrial-700 overflow-hidden">
-        <button
-          onClick={() => setExpandedSection(expandedSection === 'telemetry' ? null : 'telemetry')}
-          className="w-full flex items-center justify-between p-4 hover:bg-industrial-700/50 transition-colors"
-        >
-          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-            <Activity size={16} className="text-terminal-green" />
-            Telemetry & Control
-          </h3>
-          {expandedSection === 'telemetry' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
+        <div className="bg-industrial-800 rounded-xl border border-industrial-700 overflow-hidden">
+          <button
+            onClick={() => setExpandedSection(expandedSection === 'telemetry' ? null : 'telemetry')}
+            className="w-full flex items-center justify-between p-4 hover:bg-industrial-700/50 transition-colors"
+          >
+            <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+              <Activity size={16} className="text-terminal-green" />
+              Telemetry & Control
+            </h3>
+            {expandedSection === 'telemetry' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
 
-        {expandedSection === 'telemetry' && (
-          <div className="px-4 pb-4 space-y-3">
-             <div className="flex gap-2">
-               <input
-                 type="text"
-                 value={manualCmd}
-                 onChange={e => setManualCmd(e.target.value)}
-                 className="flex-1 bg-black border border-industrial-600 rounded px-2 py-1 text-xs font-mono text-terminal-green"
-                 placeholder="Ducky Script (e.g. STRING Hello)"
-               />
-               <button className="bg-industrial-700 text-white px-2 py-1 rounded text-xs">
-                 <Command size={12} className="inline mr-1" /> Send
-               </button>
-             </div>
+          {expandedSection === 'telemetry' && (
+            <div className="px-4 pb-4 space-y-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={manualCmd}
+                  onChange={e => setManualCmd(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleManualSend()}
+                  className="flex-1 bg-black border border-industrial-600 rounded px-2 py-1 text-xs font-mono text-terminal-green focus:outline-none focus:border-terminal-green/50"
+                  placeholder="Ducky Script (e.g. STRING Hello)"
+                />
+                <button
+                  onClick={handleManualSend}
+                  disabled={!manualCmd.trim()}
+                  className="bg-industrial-700 hover:bg-industrial-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs transition-colors"
+                >
+                  <Command size={12} className="inline mr-1" /> Send
+                </button>
+              </div>
 
-             <div className="h-32 bg-black rounded border border-industrial-600 p-2 overflow-auto font-mono text-[10px] text-gray-400">
-               <div className="text-gray-500 italic">Waiting for audit logs...</div>
-             </div>
-          </div>
-        )}
-      </div>
+              <div className="h-32 bg-black rounded border border-industrial-600 p-2 overflow-auto font-mono text-[10px] text-gray-400">
+                <div className="text-gray-500 italic">Waiting for audit logs...</div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
