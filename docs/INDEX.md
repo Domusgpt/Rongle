@@ -34,7 +34,8 @@ Welcome to the central knowledge repository for the Rongle Agentic Operator.
 *   **[Hardware Certification](../scripts/certify_hardware.py)**: Validate device compatibility.
 *   **[Android Setup](android/SETUP_GUIDE.md)**: Running on Android devices.
 *   **[Pixel Testing Plan](TESTING_PLAN_PIXEL.md)**: Specific instructions for Pixel phones.
-*   **[Terraform Config](../terraform/README.md)**: Deploying to AWS.
+*   **[Terraform (AWS)](../terraform/README.md)**: Deploying to AWS ECS.
+*   **[Terraform (GCP)](../terraform-gcp/README.md)**: Deploying to Google Cloud Run.
 
 ### 👥 Contributing
 *   **[Contributing Guide](../CONTRIBUTING.md)**: Code standards and workflow.
