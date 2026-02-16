@@ -24,11 +24,6 @@ export class WebRTCStreamer {
       }
     });
 
-    // Handle ICE candidates?
-    // In a simple LAN setup with aiortc, we often just exchange SDP once.
-    // aiortc handles trickle ICE or full ICE in SDP.
-    // We'll assume the initial offer/answer contains enough candidates or mDNS.
-
     this.pc.onconnectionstatechange = () => {
       console.log(`WebRTC Connection State: ${this.pc?.connectionState}`);
     };
@@ -36,12 +31,6 @@ export class WebRTCStreamer {
     try {
       const offer = await this.pc.createOffer();
       await this.pc.setLocalDescription(offer);
-
-      // Wait for ICE gathering to complete?
-      // Or just send what we have. aiortc usually works with the initial offer.
-      // But robustly, we should wait for 'iceGatheringState' === 'complete' if we don't trickle.
-      // Let's implement a simple wait or just send.
-      // For now, let's wait a bit or use a promise for ice gathering.
 
       await this.waitForIceGathering();
 
