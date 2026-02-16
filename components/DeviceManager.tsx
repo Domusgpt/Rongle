@@ -197,43 +197,6 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           {expandedSection === 'subscription' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
 
-      {/* Telemetry & Control Section */}
-      {selectedDeviceId && (
-      <div className="bg-industrial-800 rounded-xl border border-industrial-700 overflow-hidden">
-        <button
-          onClick={() => setExpandedSection(expandedSection === 'telemetry' ? null : 'telemetry')}
-          className="w-full flex items-center justify-between p-4 hover:bg-industrial-700/50 transition-colors"
-        >
-          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-            <Activity size={16} className="text-terminal-green" />
-            Telemetry & Control
-          </h3>
-          {expandedSection === 'telemetry' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-
-        {expandedSection === 'telemetry' && (
-          <div className="px-4 pb-4 space-y-3">
-             <div className="flex gap-2">
-               <input
-                 type="text"
-                 value={manualCmd}
-                 onChange={e => setManualCmd(e.target.value)}
-                 className="flex-1 bg-black border border-industrial-600 rounded px-2 py-1 text-xs font-mono text-terminal-green"
-                 placeholder="Ducky Script (e.g. STRING Hello)"
-               />
-               <button className="bg-industrial-700 text-white px-2 py-1 rounded text-xs">
-                 <Command size={12} className="inline mr-1" /> Send
-               </button>
-             </div>
-
-             <div className="h-32 bg-black rounded border border-industrial-600 p-2 overflow-auto font-mono text-[10px] text-gray-400">
-               <div className="text-gray-500 italic">Waiting for audit logs...</div>
-             </div>
-          </div>
-        )}
-      </div>
-      )}
-
         {expandedSection === 'subscription' && subscription && (
           <div className="px-4 pb-4 space-y-3">
             {/* Quota bar */}
@@ -291,6 +254,43 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           </div>
         )}
       </div>
+
+      {/* Telemetry & Control Section */}
+      {selectedDeviceId && (
+      <div className="bg-industrial-800 rounded-xl border border-industrial-700 overflow-hidden">
+        <button
+          onClick={() => setExpandedSection(expandedSection === 'telemetry' ? null : 'telemetry')}
+          className="w-full flex items-center justify-between p-4 hover:bg-industrial-700/50 transition-colors"
+        >
+          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <Activity size={16} className="text-terminal-green" />
+            Telemetry & Control
+          </h3>
+          {expandedSection === 'telemetry' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
+
+        {expandedSection === 'telemetry' && (
+          <div className="px-4 pb-4 space-y-3">
+             <div className="flex gap-2">
+               <input
+                 type="text"
+                 value={manualCmd}
+                 onChange={e => setManualCmd(e.target.value)}
+                 className="flex-1 bg-black border border-industrial-600 rounded px-2 py-1 text-xs font-mono text-terminal-green"
+                 placeholder="Ducky Script (e.g. STRING Hello)"
+               />
+               <button className="bg-industrial-700 text-white px-2 py-1 rounded text-xs">
+                 <Command size={12} className="inline mr-1" /> Send
+               </button>
+             </div>
+
+             <div className="h-32 bg-black rounded border border-industrial-600 p-2 overflow-auto font-mono text-[10px] text-gray-400">
+               <div className="text-gray-500 italic">Waiting for audit logs...</div>
+             </div>
+          </div>
+        )}
+      </div>
+      )}
     </div>
   );
 };
