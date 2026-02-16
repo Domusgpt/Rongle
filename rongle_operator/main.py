@@ -4,6 +4,7 @@ Hardware-Isolated Agentic Operator — Async Core (RFC-001)
 
 Implements the async perception-action loop with robust calibration (RFC-004)
 and session persistence (RFC-002).
+Also supports WebRTC streaming input (RFC-003).
 """
 
 from __future__ import annotations
@@ -26,6 +27,14 @@ from .visual_cortex import FrameGrabber, ReflexTracker, VLMReasoner, FastDetecto
 from .visual_cortex.vlm_reasoner import GeminiBackend, LocalVLMBackend
 from .session_manager import SessionManager, AgentSession
 from .calibration import HomographyCalibrator, CalibrationResult
+
+# RFC-003 WebRTC
+try:
+    from .visual_cortex.webrtc_receiver import WebRTCReceiver
+    from .webrtc_server import WebRTCServer
+    HAS_WEBRTC = True
+except ImportError:
+    HAS_WEBRTC = False
 
 logger = logging.getLogger("operator")
 
@@ -76,6 +85,7 @@ async def perception_task(
     while not stop_event.is_set():
         try:
             # 1. Wait for next frame (Async)
+            # This works for both V4L2 and WebRTC sources
             frame = await grabber.wait_for_frame()
 
             # 2. Detect Cursor
@@ -96,7 +106,6 @@ async def perception_task(
                 prompt = f"{goal} (previous action: {last_action_desc})"
 
             # VLM Query (Async)
-            # Use detector for foveation if implemented (skipping for simplicity in this refactor, relying on VLM)
             element = await reasoner.find_element(frame.image, prompt)
 
             action = None
@@ -104,12 +113,10 @@ async def perception_task(
                 logger.info("Perception: Found target '%s' at (%d, %d)", element.label, element.x, element.y)
 
                 # Map target to normalized screen coords
-                # Note: element.x, element.y are in Camera Pixels (from VLM on frame)
                 target_center_x, target_center_y = element.center
                 target_norm = calibrator.map_camera_to_screen(target_center_x, target_center_y)
 
                 # Create Action
-                # Logic: Move and Click
                 action = AgentAction(
                     kind="CLICK",
                     label=f"Click '{element.label}'",
@@ -118,8 +125,6 @@ async def perception_task(
                 )
             else:
                 logger.info("Perception: No element found. Goal might be complete.")
-                # Could produce a DONE action or wait
-                # For now, just wait a bit and retry
                 await asyncio.sleep(1.0)
                 continue
 
@@ -171,16 +176,6 @@ async def actuation_task(
 
             # Execute Action
             if action.kind == "CLICK" and action.target_norm and action.current_norm:
-                # Calculate HID moves
-                # We use the calibrator sensitivity to map normalized distance to HID units
-                # start_norm = action.current_norm
-                # end_norm = action.target_norm
-
-                # Logic:
-                # 1. Convert current_norm to "virtual HID pos"
-                # 2. Convert target_norm to "virtual HID pos"
-                # 3. Use Humanizer to path between them
-
                 sx = calibrator.sensitivity_x
                 sy = calibrator.sensitivity_y
 
@@ -192,14 +187,6 @@ async def actuation_task(
 
                 # Use Humanizer (blocking, fast)
                 points = parser.humanizer.bezier_path(start_hid_x, start_hid_y, end_hid_x, end_hid_y)
-
-                # Execute Move (Async-friendly wrapper needed?)
-                # HIDGadget writes are fast, but sleeps in it are blocking.
-                # We should really make HIDGadget async or use executor.
-                # For now, we rely on the fact that HIDGadget.send_mouse_path uses time.sleep()
-                # which BLOCKS the loop.
-                # RFC-001 requires async. We must fix this.
-                # Hack: Run blocking HID calls in executor.
 
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, hid.send_mouse_path, points)
@@ -237,17 +224,20 @@ async def actuation_task(
 # ---------------------------------------------------------------------------
 # Setup & Main
 # ---------------------------------------------------------------------------
-def check_environment(settings: Settings, dry_run: bool) -> None:
+def check_environment(settings: Settings, dry_run: bool, use_webrtc: bool) -> None:
     """Pre-flight check for hardware availability."""
     if dry_run:
         logger.info("Dry-run mode: skipping hardware checks.")
         return
 
     required = [
-        ("Video Device", settings.video_device),
         ("Keyboard Gadget", settings.hid_keyboard_dev),
         ("Mouse Gadget", settings.hid_mouse_dev),
     ]
+
+    # Only check video device if NOT using WebRTC
+    if not use_webrtc:
+        required.append(("Video Device", settings.video_device))
 
     missing = []
     for name, path in required:
@@ -277,6 +267,7 @@ async def main_async() -> None:
     parser.add_argument("--dry-run", action="store_true", help="No actual HID output")
     parser.add_argument("--software-estop", action="store_true",
                         help="Use software-only emergency stop")
+    parser.add_argument("--webrtc", action="store_true", help="Enable WebRTC video input (RFC-003)")
     args = parser.parse_args()
 
     # Logging
@@ -291,7 +282,7 @@ async def main_async() -> None:
 
     settings = Settings.load(args.config)
     try:
-        check_environment(settings, args.dry_run)
+        check_environment(settings, args.dry_run, args.webrtc)
     except RuntimeError as e:
         sys.exit(str(e))
 
@@ -310,12 +301,26 @@ async def main_async() -> None:
         mouse_dev=settings.hid_mouse_dev,
         dry_run=args.dry_run,
     )
+
+    # WebRTC Setup
+    webrtc_receiver = None
+    webrtc_server = None
+    if args.webrtc:
+        if not HAS_WEBRTC:
+            logger.error("WebRTC requested but dependencies (aiortc, aiohttp) not found.")
+            sys.exit(1)
+        logger.info("Initializing WebRTC Receiver...")
+        webrtc_receiver = WebRTCReceiver()
+        webrtc_server = WebRTCServer(webrtc_receiver, port=8080) # Using 8080 or configurable?
+
     grabber = FrameGrabber(
         device=settings.video_device,
         width=settings.screen_width,
         height=settings.screen_height,
         fps=settings.capture_fps,
+        receiver=webrtc_receiver
     )
+
     tracker = ReflexTracker(
         cursor_templates_dir=settings.cursor_templates_dir,
     )
@@ -343,7 +348,6 @@ async def main_async() -> None:
     )
 
     # State / Session
-    # Check for active session or create new
     goal = args.goal
     current_session = session_mgr.load_active_session()
 
@@ -357,7 +361,6 @@ async def main_async() -> None:
              goal = current_session.goal
     else:
         if not goal:
-            # Interactive prompt (blocking, but at startup is fine)
             goal = input("Enter agent goal: ").strip()
 
         if not goal:
@@ -373,38 +376,38 @@ async def main_async() -> None:
         hid.open()
         estop.start()
 
-        # Start Streaming (Async Loop)
         loop = asyncio.get_running_loop()
+
+        if webrtc_server:
+            await webrtc_server.start()
+            logger.info("WebRTC Server running. Waiting for connection...")
+            # If WebRTC, we might want to wait for first frame BEFORE calibration?
+            # Or trust wait_for_frame handles it.
+
         grabber.start_streaming(loop=loop)
 
         # Initial Calibration
-        # We need to wait for camera to warm up
         await asyncio.sleep(2.0)
 
-        # Perform Calibration (RFC-004)
         try:
-             # We assume dry-run skips calibration or mocks it?
-             # For now, real calibration calls.
              if not args.dry_run:
+                 if args.webrtc:
+                     logger.info("Waiting for WebRTC frame for calibration...")
+                     # Implicitly wait_for_frame inside calibrate will block until connected
                  await calibrator.calibrate(hid, grabber, tracker)
              else:
                  logger.info("Dry run: Skipping calibration")
         except Exception as e:
              logger.error("Calibration failed: %s", e)
-             # Proceed with defaults or exit?
-             # Proceeding with uncalibrated might be dangerous.
-             # But let's assume default sensitivity is better than crash.
 
         # Start Tasks
         action_queue = asyncio.Queue(maxsize=1)
         stop_event = asyncio.Event()
 
-        # Signal Handlers
         def _signal_handler():
             logger.info("Stopping...")
             stop_event.set()
 
-        # Asyncio signal handling
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, _signal_handler)
 
@@ -421,10 +424,8 @@ async def main_async() -> None:
             ))
         ]
 
-        # Wait until stopped
         await stop_event.wait()
 
-        # Cleanup tasks
         for t in tasks:
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -433,14 +434,16 @@ async def main_async() -> None:
         logger.exception("Fatal error in main loop: %s", e)
     finally:
         logger.info("Shutting down...")
+        if webrtc_server:
+            await webrtc_server.stop()
+        if webrtc_receiver:
+            await webrtc_receiver.close()
+
         hid.release_all()
         estop.stop()
         grabber.close()
         hid.close()
         audit.close()
-        # Mark session done if goal reached?
-        # Actually session persists until explicitly cleared or goal completion logic.
-        # We leave it active for resume.
 
 def main() -> None:
     asyncio.run(main_async())
