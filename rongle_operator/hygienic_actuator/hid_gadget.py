@@ -17,7 +17,7 @@ import os
 import time
 from pathlib import Path
 
-from .ducky_parser import KeyboardReport, MouseReport, ParsedCommand
+from .ducky_parser import DuckyScriptParser, KeyboardReport, MouseReport, ParsedCommand
 from .humanizer import BezierPoint
 
 logger = logging.getLogger(__name__)
@@ -124,11 +124,8 @@ class HIDGadget:
 
     def send_string(self, text: str, inter_key_ms: int = 12) -> None:
         """Type a string character-by-character with inter-key delay."""
-        from .ducky_parser import DuckyScriptParser
-        # Use a temporary parser instance for char conversion
-        parser = DuckyScriptParser.__new__(DuckyScriptParser)
         for ch in text:
-            report = parser.char_to_report(ch)
+            report = DuckyScriptParser.char_to_report(ch)
             self.send_key(report)
             time.sleep(inter_key_ms / 1000.0)
 

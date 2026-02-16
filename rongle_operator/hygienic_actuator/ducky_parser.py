@@ -215,11 +215,12 @@ class DuckyScriptParser:
 
             # REPEAT — duplicate last command N times
             m = self._RE_REPEAT.match(line)
-            if m and commands:
-                count = int(m.group(1))
-                last = commands[-1]
-                for _ in range(count):
-                    commands.append(last)
+            if m:
+                if commands:
+                    count = int(m.group(1))
+                    last = commands[-1]
+                    for _ in range(count):
+                        commands.append(last)
                 continue
 
             cmd = self._parse_line(line)
@@ -235,7 +236,8 @@ class DuckyScriptParser:
     # ------------------------------------------------------------------
     # Character-level helpers
     # ------------------------------------------------------------------
-    def char_to_report(self, ch: str) -> KeyboardReport:
+    @staticmethod
+    def char_to_report(ch: str) -> KeyboardReport:
         """Convert a single character to a KeyboardReport."""
         if ch in _SHIFTED_MAP:
             mod, code = _SHIFTED_MAP[ch]
@@ -246,9 +248,10 @@ class DuckyScriptParser:
         mod = Modifier.LEFT_SHIFT if ch.isupper() and ch.isalpha() else Modifier.NONE
         return KeyboardReport(modifier=mod, keys=[code])
 
-    def string_to_reports(self, text: str) -> list[KeyboardReport]:
+    @staticmethod
+    def string_to_reports(text: str) -> list[KeyboardReport]:
         """Convert a string into a sequence of keyboard reports."""
-        return [self.char_to_report(ch) for ch in text]
+        return [DuckyScriptParser.char_to_report(ch) for ch in text]
 
     # ------------------------------------------------------------------
     # Internal line parser
