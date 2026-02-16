@@ -5,7 +5,7 @@ import json
 import time
 
 import pytest
-from operator.immutable_ledger.audit_logger import AuditLogger, AuditEntry, _GENESIS_HASH
+from rongle_operator.immutable_ledger.audit_logger import AuditLogger, AuditEntry, _GENESIS_HASH
 
 
 # ---------------------------------------------------------------------------
