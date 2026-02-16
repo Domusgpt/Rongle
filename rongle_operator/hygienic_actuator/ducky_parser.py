@@ -98,10 +98,6 @@ class KeyboardReport:
     reserved: int = 0
     keys: list[int] = field(default_factory=lambda: [0, 0, 0, 0, 0, 0])
 
-    def to_bytes(self) -> bytes:
-        return struct.pack("BBBBBBBBf", self.modifier, self.reserved,
-                           *self.keys[:6])[:8]
-
     def pack(self) -> bytes:
         """Pack into an 8-byte HID keyboard report."""
         return struct.pack(
@@ -185,14 +181,12 @@ class DuckyScriptParser:
         screen_w: int = 1920,
         screen_h: int = 1080,
         humanizer: Humanizer | None = None,
-        default_inter_key_ms: int = 12,
         scale_x: float = 1.0,
         scale_y: float = 1.0,
     ) -> None:
         self.screen_w = screen_w
         self.screen_h = screen_h
         self.humanizer = humanizer or Humanizer()
-        self.default_inter_key_ms = default_inter_key_ms
         self.scale_x = scale_x
         self.scale_y = scale_y
 
