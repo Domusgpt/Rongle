@@ -15,6 +15,7 @@ predictions and correcting errors (active learning).
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -182,7 +183,7 @@ Return corrected JSON:
         image_path = ""
         if save_image:
             image_path = str(self.dataset_dir / "images" / f"{image_hash}.jpg")
-            Path(image_path).write_bytes(image_bytes)
+            await asyncio.to_thread(Path(image_path).write_bytes, image_bytes)
 
         # Call VLM
         try:
