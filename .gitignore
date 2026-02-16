@@ -25,9 +25,12 @@ android/app/src/main/assets/capacitor.config.json
 
 # Training data and checkpoints
 training/datasets/
+training/data/
 training/checkpoints/
 training/*.pt
 training/*.onnx
+*.pth
+*.onnx
 
 # Editor directories and files
 .vscode/*
