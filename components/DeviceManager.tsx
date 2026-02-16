@@ -12,6 +12,12 @@ interface DeviceManagerProps {
   selectedDeviceId: string | null;
 }
 
+interface AuditLog {
+  timestamp: string;
+  level: string;
+  message: string;
+}
+
 export const DeviceManager: React.FC<DeviceManagerProps> = ({
   onSelectDevice,
   selectedDeviceId,
@@ -19,6 +25,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   const [devices, setDevices] = useState<PortalDevice[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [usage, setUsage] = useState<UsageStats | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [newDeviceName, setNewDeviceName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -31,8 +38,23 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
 
   // Poll for audit logs if a device is selected
   useEffect(() => {
-      // This is a placeholder for the audit log polling loop
-      // In a real implementation, we would call portalAPI.getAuditLogs(selectedDeviceId)
+    if (!selectedDeviceId || expandedSection !== 'telemetry') {
+      setAuditLogs([]);
+      return;
+    }
+
+    const fetchLogs = async () => {
+      try {
+        const logs = await portalAPI.getAuditLog(selectedDeviceId, 0, 50);
+        setAuditLogs(logs);
+      } catch (err) {
+        console.error('[DeviceManager] Failed to fetch audit logs:', err);
+      }
+    };
+
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 5000);
+    return () => clearInterval(interval);
   }, [selectedDeviceId, expandedSection]);
 
   const loadAll = async () => {
@@ -105,23 +127,43 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   return (
     <div className="space-y-4">
       {error && (
-        <div className="bg-terminal-red/10 border border-terminal-red/30 rounded px-3 py-2 text-xs text-terminal-red font-mono">
-          {error}
+        <div className="bg-terminal-red/10 border border-terminal-red/30 rounded px-3 py-2 text-xs text-terminal-red font-mono flex justify-between items-center">
+          <span>{error}</span>
+          <button onClick={() => setError('')} className="ml-2 hover:text-white transition-colors">
+            <Plus size={14} className="rotate-45" />
+          </button>
         </div>
       )}
 
       {/* Devices Section */}
       <div className="bg-industrial-800 rounded-xl border border-industrial-700 overflow-hidden">
-        <button
-          onClick={() => setExpandedSection(expandedSection === 'devices' ? null : 'devices')}
-          className="w-full flex items-center justify-between p-4 hover:bg-industrial-700/50 transition-colors"
-        >
-          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-            <Smartphone size={16} className="text-terminal-blue" />
-            Devices ({devices.length})
-          </h3>
-          {expandedSection === 'devices' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
+        <div className="w-full flex items-center justify-between hover:bg-industrial-700/50 transition-colors">
+          <button
+            onClick={() => setExpandedSection(expandedSection === 'devices' ? null : 'devices')}
+            className="flex-1 flex items-center p-4 text-left"
+          >
+            <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+              <Smartphone size={16} className="text-terminal-blue" />
+              Devices ({devices.length})
+            </h3>
+          </button>
+          <div className="flex items-center gap-2 pr-4">
+            <button
+              onClick={(e) => { e.stopPropagation(); loadAll(); }}
+              className={`p-1 text-gray-500 hover:text-terminal-blue transition-all ${loading ? 'animate-spin text-terminal-blue' : ''}`}
+              title="Refresh all"
+              disabled={loading}
+            >
+              <RefreshCw size={14} />
+            </button>
+            <button
+              onClick={() => setExpandedSection(expandedSection === 'devices' ? null : 'devices')}
+              className="p-1 text-gray-500"
+            >
+              {expandedSection === 'devices' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+          </div>
+        </div>
 
         {expandedSection === 'devices' && (
           <div className="px-4 pb-4 space-y-3">
@@ -302,7 +344,20 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
               </div>
 
               <div className="h-32 bg-black rounded border border-industrial-600 p-2 overflow-auto font-mono text-[10px] text-gray-400">
+              {auditLogs.length > 0 ? (
+                auditLogs.map((log, i) => (
+                  <div key={i} className="mb-1 border-b border-industrial-800 pb-1 last:border-0">
+                    <span className="text-industrial-500">
+                      [{new Date(log.timestamp || Date.now()).toLocaleTimeString()}]
+                    </span>{' '}
+                    <span className={log.level === 'ERROR' ? 'text-terminal-red' : 'text-terminal-green'}>
+                      {log.message}
+                    </span>
+                  </div>
+                ))
+              ) : (
                 <div className="text-gray-500 italic">Waiting for audit logs...</div>
+              )}
               </div>
             </div>
           )}
