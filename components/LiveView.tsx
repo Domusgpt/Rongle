@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { VisionAnalysisResult, AgentStatus } from '../types';
 import type { Annotation } from '../types';
 import { AnnotationCanvas } from './AnnotationCanvas';
-import { Scan, AlertCircle, Camera, Layers } from 'lucide-react';
+import { WebRTCStreamer } from '../services/webrtc-streamer';
+import { Scan, AlertCircle, Camera, Layers, Cast } from 'lucide-react';
 
 interface LiveViewProps {
   status: AgentStatus;
@@ -12,20 +13,25 @@ interface LiveViewProps {
   isProcessing: boolean;
   annotationsEnabled: boolean;
   onCameraActive?: (active: boolean) => void;
+  streamToBackend?: boolean;
+  backendUrl?: string;
 }
 
 export const LiveView: React.FC<LiveViewProps> = ({
   status, analysis, onCaptureFrame, onAnnotatedFrame, isProcessing,
-  annotationsEnabled, onCameraActive,
+  annotationsEnabled, onCameraActive, streamToBackend = false, backendUrl = 'http://localhost:8080'
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamerRef = useRef<WebRTCStreamer | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [lastFrameBase64, setLastFrameBase64] = useState<string | null>(null);
   const [showAnnotations, setShowAnnotations] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
 
   // Initialize Camera (Mobile Back Camera)
   useEffect(() => {
+    let mounted = true;
     const startVideo = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -35,20 +41,25 @@ export const LiveView: React.FC<LiveViewProps> = ({
             height: { ideal: 1080 }
           }
         });
-        if (videoRef.current) {
+        if (mounted && videoRef.current) {
           videoRef.current.srcObject = stream;
+          setStreamError(null);
+          onCameraActive?.(true);
+        } else {
+          stream.getTracks().forEach(t => t.stop());
         }
-        setStreamError(null);
-        onCameraActive?.(true);
       } catch (err) {
         console.error("Camera access denied:", err);
-        setStreamError("CAMERA ACCESS DENIED");
-        onCameraActive?.(false);
+        if (mounted) {
+          setStreamError("CAMERA ACCESS DENIED");
+          onCameraActive?.(false);
+        }
       }
     };
     startVideo();
 
     return () => {
+      mounted = false;
       // Cleanup camera on unmount
       if (videoRef.current?.srcObject) {
         const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
@@ -56,6 +67,37 @@ export const LiveView: React.FC<LiveViewProps> = ({
       }
     };
   }, []);
+
+  // WebRTC Streaming
+  useEffect(() => {
+    const handleStreaming = async () => {
+      if (streamToBackend && backendUrl && videoRef.current?.srcObject) {
+        if (!streamerRef.current) {
+          streamerRef.current = new WebRTCStreamer(backendUrl);
+        }
+        try {
+          const stream = videoRef.current.srcObject as MediaStream;
+          await streamerRef.current.start(stream);
+          setIsStreaming(true);
+        } catch (err) {
+          console.error("Streaming failed:", err);
+          setIsStreaming(false);
+        }
+      } else {
+        if (streamerRef.current) {
+          streamerRef.current.stop();
+          streamerRef.current = null;
+        }
+        setIsStreaming(false);
+      }
+    };
+
+    handleStreaming();
+
+    return () => {
+      streamerRef.current?.stop();
+    };
+  }, [streamToBackend, backendUrl]); // Re-run if props change
 
   // Capture frame when entering PERCEIVING state
   useEffect(() => {
@@ -161,6 +203,12 @@ export const LiveView: React.FC<LiveViewProps> = ({
               <Camera size={10} />
               LIVE
             </div>
+            {isStreaming && (
+              <div className="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 animate-pulse">
+                <Cast size={10} />
+                STREAMING
+              </div>
+            )}
           </div>
         </div>
       </div>
