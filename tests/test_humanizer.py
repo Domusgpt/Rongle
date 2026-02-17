@@ -4,7 +4,7 @@ import math
 import random
 
 import pytest
-from rongle_operator.hygienic_actuator.humanizer import Humanizer, BezierPoint
+from rng_operator.hygienic_actuator.humanizer import Humanizer, BezierPoint
 
 
 @pytest.fixture

@@ -1,89 +1,88 @@
 #!/bin/bash
-# Rongle CLI Utility
-# Unified interface for development and operations
+# Rongle CLI — Unified management tool
 
 set -e
 
-# Helper to check if docker compose is available
-DOCKER_COMPOSE="docker compose"
-if ! $DOCKER_COMPOSE version >/dev/null 2>&1; then
-    if command -v docker-compose >/dev/null 2>&1; then
-        DOCKER_COMPOSE="docker-compose"
-    else
-        echo "Error: docker compose or docker-compose not found."
-        exit 1
-    fi
-fi
-
-COMMAND=$1
-shift
-
-case "$COMMAND" in
-  start)
-    echo "🚀 Starting Rongle services..."
-    $DOCKER_COMPOSE up -d --build
-    echo "✅ Services started."
-    echo "   - Portal: http://localhost:8000"
-    echo "   - Postgres: localhost:5432"
-    echo "   - Redis: localhost:6379"
-    ;;
-  stop)
-    echo "🛑 Stopping Rongle services..."
-    $DOCKER_COMPOSE down
-    ;;
-  restart)
-    echo "🔄 Restarting Rongle services..."
-    $DOCKER_COMPOSE down
-    $DOCKER_COMPOSE up -d --build
-    ;;
-  logs)
-    $DOCKER_COMPOSE logs -f "$@"
-    ;;
-  shell)
-    SERVICE=${1:-operator}
-    echo "🐚 Entering shell for $SERVICE..."
-    $DOCKER_COMPOSE exec -it "$SERVICE" /bin/bash
-    ;;
-  test)
-    TYPE=${1:-all}
-    if [ "$TYPE" == "backend" ]; then
-        echo "🧪 Running Backend Tests (pytest)..."
-        # Try running in container if up, else local
-        if $DOCKER_COMPOSE ps --services --filter "status=running" | grep -q "operator"; then
-             $DOCKER_COMPOSE exec operator pytest
-        else
-             npm run test:backend
-        fi
-    elif [ "$TYPE" == "frontend" ]; then
-        echo "🧪 Running Frontend Tests (vitest)..."
-        npm run test
-    else
-        echo "🧪 Running All Tests..."
-        echo "   [Frontend]"
-        npm run test
-        echo "   [Backend]"
-        if $DOCKER_COMPOSE ps --services --filter "status=running" | grep -q "operator"; then
-             $DOCKER_COMPOSE exec operator pytest
-        else
-             npm run test:backend
-        fi
-    fi
-    ;;
-  verify)
-    echo "🔍 Verifying build integrity..."
-    ./scripts/verify_build.sh
-    ;;
-  help|*)
-    echo "Usage: $0 {start|stop|restart|logs|shell|test|verify}"
+function show_help {
+    echo "🦆 Rongle Management CLI"
+    echo "--------------------------------------------------------"
+    echo "Usage: ./scripts/rongle [COMMAND]"
     echo ""
-    echo "Commands:"
-    echo "  start       Start all services (Portal, Operator, DB, Redis) in background"
-    echo "  stop        Stop all services"
-    echo "  restart     Restart all services"
-    echo "  logs [svc]  Tail logs (optional: specific service name)"
-    echo "  shell [svc] Open shell in container (default: operator)"
-    echo "  test [type] Run tests (all|backend|frontend)"
-    echo "  verify      Run build verification script"
-    exit 1
-    ;;
+    echo "  🚀 Development"
+    echo "     setup       Install dependencies (System, Python, Node)"
+    echo "     dev         Start local dev environment (No Docker)"
+    echo "     start       Start the full stack via Docker Compose"
+    echo "     stop        Stop all running services"
+    echo "     restart     Restart all services"
+    echo "     logs        Follow logs from all containers"
+    echo ""
+    echo "  🧪 Testing & Quality"
+    echo "     test        Run all unit tests (Frontend + Backend)"
+    echo "     verify      Check local environment prerequisites"
+    echo "     pixel       Run the interactive Pixel 10 Setup Wizard"
+    echo ""
+    echo "  🛠️  Ops"
+    echo "     build       Rebuild Docker images"
+    echo "     shell       Open a bash shell inside the operator container"
+    echo "--------------------------------------------------------"
+    echo "See docs/ONBOARDING.md for more details."
+    echo ""
+}
+
+case "$1" in
+    start)
+        echo "Starting Rongle Stack..."
+        docker-compose up -d
+        ;;
+    setup)
+        ./scripts/install_dependencies.sh
+        ;;
+    dev)
+        ./scripts/start_dev_env.sh
+        ;;
+    docker-dev)
+        echo "Starting Rongle Stack in DEV MODE (Docker)..."
+        # We override the command for the operator service
+        GEMINI_API_KEY=${GEMINI_API_KEY} docker-compose run --rm --service-ports operator python -m rng_operator.main --dry-run --software-estop --dev-mode
+        ;;
+    stop)
+        echo "Stopping Rongle Stack..."
+        docker-compose down
+        ;;
+    restart)
+        docker-compose restart
+        ;;
+    logs)
+        docker-compose logs -f
+        ;;
+    test)
+        echo "=== Frontend Tests ==="
+        npm run test
+        echo "=== Backend Tests ==="
+        # If running in docker, use docker exec. Else local pytest.
+        if [ -f /.dockerenv ]; then
+            pytest rng_operator/tests
+        else
+            npm run test:backend
+        fi
+        ;;
+    build)
+        docker-compose build
+        ;;
+    pixel)
+        python3 scripts/setup_pixel_test.py
+        ;;
+    shell)
+        docker-compose exec operator /bin/bash
+        ;;
+    verify)
+        echo "Checking environment..."
+        python3 -c "import cv2; print(f'OpenCV: {cv2.__version__}')"
+        node -v
+        npm -v
+        echo "OK"
+        ;;
+    *)
+        show_help
+        ;;
 esac

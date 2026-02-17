@@ -4,7 +4,7 @@ import json
 import time
 
 import pytest
-from rongle_operator.policy_engine.guardian import (
+from rng_operator.policy_engine.guardian import (
     ClickRegion,
     PolicyConfig,
     PolicyGuardian,

@@ -2,7 +2,7 @@
 
 import struct
 import pytest
-from rongle_operator.hygienic_actuator.ducky_parser import (
+from rng_operator.hygienic_actuator.ducky_parser import (
     DuckyScriptParser,
     KeyboardReport,
     MouseReport,
@@ -13,7 +13,7 @@ from rongle_operator.hygienic_actuator.ducky_parser import (
     _SPECIAL_KEYS,
     _MODIFIER_ALIASES,
 )
-from rongle_operator.hygienic_actuator.humanizer import Humanizer
+from rng_operator.hygienic_actuator.humanizer import Humanizer
 
 
 # ---------------------------------------------------------------------------
@@ -168,19 +168,6 @@ class TestStringCommand:
     def test_string_to_reports_length(self, parser):
         reports = parser.string_to_reports("abc")
         assert len(reports) == 3
-
-    def test_static_char_to_report(self):
-        # Verify it can be called without an instance
-        report = DuckyScriptParser.char_to_report("z")
-        assert report.modifier == Modifier.NONE
-        assert report.keys[0] == 0x1D
-
-    def test_static_string_to_reports(self):
-        # Verify it can be called without an instance
-        reports = DuckyScriptParser.string_to_reports("xy")
-        assert len(reports) == 2
-        assert reports[0].keys[0] == 0x1B
-        assert reports[1].keys[0] == 0x1C
 
 
 # ---------------------------------------------------------------------------

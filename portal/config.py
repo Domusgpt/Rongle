@@ -40,7 +40,7 @@ class PortalSettings:
 
     # -- Rate Limiting --
     RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
-    REDIS_URL: str | None = os.getenv("REDIS_URL", None)
+    REDIS_URL: str = os.getenv("REDIS_URL", "")
 
     # -- CORS --
     CORS_ORIGINS: list[str] = os.getenv(

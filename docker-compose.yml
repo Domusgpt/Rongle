@@ -1,30 +1,6 @@
 version: '3.8'
 
 services:
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: rongle
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: rongle_db
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rongle"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   portal:
     build:
       context: .
@@ -32,34 +8,39 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://rongle:password@db:5432/rongle_db
+      - DATABASE_URL=postgresql://rongle:rongle@postgres:5432/rongle
       - REDIS_URL=redis://redis:6379/0
-      - ALLOWED_ORIGINS=http://localhost:5173
+      - JWT_SECRET=dev_secret_key_change_me
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./portal:/app/portal:ro
+      - postgres
+      - redis
 
   operator:
     build:
       context: .
-      dockerfile: rongle_operator/Dockerfile
-    environment:
-      - RONGLE_DRY_RUN=true
-      # If operator needs to talk to portal or redis
-      - REDIS_URL=redis://redis:6379/0
-      # Mount USB devices if needed (commented out for safety/portability)
-      # devices:
-      #   - /dev/hidg0:/dev/hidg0
-    depends_on:
-      redis:
-        condition: service_healthy
+      dockerfile: rng_operator/Dockerfile
+    # Privileged mode required for direct hardware access (/dev/video0, /dev/hidg*)
+    privileged: true
     volumes:
-      - ./rongle_operator:/app/rongle_operator:ro
+      - /dev/video0:/dev/video0
+      # - /dev/hidg0:/dev/hidg0 # Uncomment on actual hardware
+      # - /dev/hidg1:/dev/hidg1
+    environment:
+      - VITE_PORTAL_URL=http://portal:8000
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    command: ["python", "-m", "rng_operator.main", "--dry-run", "--software-estop"] # Default safe mode
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=rongle
+      - POSTGRES_PASSWORD=rongle
+      - POSTGRES_DB=rongle
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
 
 volumes:
   postgres_data:
-  redis_data:
