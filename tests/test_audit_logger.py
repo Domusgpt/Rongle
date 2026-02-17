@@ -5,7 +5,7 @@ import json
 import time
 
 import pytest
-from operator.immutable_ledger.audit_logger import AuditLogger, AuditEntry, _GENESIS_HASH
+from rng_operator.immutable_ledger.audit_logger import AuditLogger, AuditEntry, _GENESIS_HASH
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ class TestHashComputation:
         ss_hash = "a" * 64
         prev_hash = "b" * 64
 
-        expected_preimage = f"{ts:.6f}|{action}|{ss_hash}|{prev_hash}"
+        expected_preimage = f"{ts:.6f}||{action}||{ss_hash}||{prev_hash}"
         expected_hash = hashlib.sha256(expected_preimage.encode("utf-8")).hexdigest()
 
         actual = AuditLogger.compute_hash(ts, action, ss_hash, prev_hash)
