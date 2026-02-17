@@ -62,8 +62,8 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
       setDevices(devs);
       setSubscription(sub);
       setUsage(usg);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -77,8 +77,8 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
       setDevices(prev => [device, ...prev]);
       setNewDeviceName('');
       onSelectDevice(device);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -87,8 +87,8 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
       await portalAPI.deleteDevice(id);
       setDevices(prev => prev.filter(d => d.id !== id));
       if (selectedDeviceId === id) onSelectDevice(null);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -100,8 +100,8 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
       if (selectedDeviceId === id) {
         onSelectDevice(updated);
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -351,7 +351,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
             <div className="h-32 bg-black rounded border border-industrial-600 p-2 overflow-auto font-mono text-[10px] text-gray-400">
               {auditLogs.length > 0 ? (
                 auditLogs.map((log) => (
-                  <div key={log.id} className="mb-1 border-b border-industrial-800 pb-1 last:border-0">
+                  <div key={log.sequence} className="mb-1 border-b border-industrial-800 pb-1 last:border-0">
                     <span className="text-industrial-500">
                       [{new Date(log.timestamp_iso || log.timestamp * 1000).toLocaleTimeString()}]
                     </span>{' '}

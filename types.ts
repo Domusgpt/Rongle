@@ -147,6 +147,7 @@ export interface Subscription {
 
 export interface UsageStats {
   tier: string;
+  billing_cycle_start: string;
   llm_calls_used: number;
   llm_calls_quota: number;
   tokens_input_total: number;
@@ -154,7 +155,6 @@ export interface UsageStats {
 }
 
 export interface AuditLogEntry {
-  id: string;
   sequence: number;
   timestamp: number;
   timestamp_iso: string;
@@ -163,7 +163,6 @@ export interface AuditLogEntry {
   screenshot_hash: string;
   entry_hash: string;
   policy_verdict: string;
-  device_id: string;
 }
 
 export const TIER_INFO: Record<SubscriptionTier, {

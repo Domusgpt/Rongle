@@ -136,7 +136,7 @@ export default function App() {
   }, []);
 
   // Helper to add logs
-  const addLog = useCallback((level: LogLevel, message: string, metadata?: any) => {
+  const addLog = useCallback((level: LogLevel, message: string, metadata?: Record<string, unknown>) => {
     setLogs(prev => [...prev, {
       id: Math.random().toString(36).substr(2, 9),
       timestamp: new Date(),
@@ -211,8 +211,8 @@ export default function App() {
         analysis = parsePortalLLMResponse(resp.result);
         setHardware(prev => ({ ...prev, latencyMs: Math.round(resp.latency_ms) }));
         addLog(LogLevel.INFO, `Quota remaining: ${resp.remaining_quota}`, {
-          tokens_in: resp.tokens_input,
-          tokens_out: resp.tokens_output,
+          tokens_in: resp.tokens_input as unknown as number,
+          tokens_out: resp.tokens_output as unknown as number,
         });
       } else {
         // Direct Gemini call (local API key)
@@ -252,8 +252,8 @@ export default function App() {
         }
       }, 1000);
 
-    } catch (error: any) {
-      const message = error?.message || String(error);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       vlmRetryCountRef.current += 1;
 
       // Camera permission errors — prompt user to re-grant
@@ -297,8 +297,8 @@ export default function App() {
       try {
         await hidBridgeRef.current.executeDuckyScript(analysis.duckyScript);
         addLog(LogLevel.SUCCESS, "Payload injected via HID bridge");
-      } catch (err: any) {
-        const errMsg = err?.message || String(err);
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
         if (errMsg.includes('device has been lost') || errMsg.includes('serial')) {
           addLog(LogLevel.WARNING, "HID disconnected during execution — switching to clipboard mode");
           setHardware(prev => ({ ...prev, hidConnected: false, hidMode: 'none' as HIDMode }));

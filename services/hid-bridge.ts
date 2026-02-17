@@ -64,8 +64,8 @@ export class HIDBridge {
     error: null,
   };
 
-  private serialPort: any = null;        // Web Serial port
-  private serialWriter: any = null;
+  private serialPort: unknown = null;        // Web Serial port
+  private serialWriter: any = null; // Writers are complex to type without @types/w3c-web-serial
   private ws: WebSocket | null = null;    // WebSocket connection
   private onStateChange: ((s: HIDConnectionState) => void) | null = null;
 
@@ -107,8 +107,9 @@ export class HIDBridge {
         error: null,
       });
       return true;
-    } catch (err: any) {
-      this.updateState({ error: `Serial connection failed: ${err.message}` });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.updateState({ error: `Serial connection failed: ${message}` });
       return false;
     }
   }
@@ -137,8 +138,9 @@ export class HIDBridge {
         this.ws.onclose = () => {
           this.updateState({ connected: false, mode: 'none', deviceName: '' });
         };
-      } catch (err: any) {
-        this.updateState({ error: err.message });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.updateState({ error: message });
         resolve(false);
       }
     });
@@ -372,7 +374,7 @@ export class HIDBridge {
   // WebSocket transport
   // -----------------------------------------------------------------------
 
-  private wsSend(msg: Record<string, any>): void {
+  private wsSend(msg: Record<string, unknown>): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
     }
