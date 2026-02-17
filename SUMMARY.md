@@ -5,7 +5,7 @@ This document serves as a high-level map of the Rongle repository structure.
 ## Root Directories
 
 *   `rng_operator/`: **The Backend.** The Python daemon that runs on the hardware device.
-*   `frontend/`: **The Frontend.** The React/Vite PWA that controls the agent.
+*   `src/`: **The Frontend.** The React/Vite PWA that controls the agent.
 *   `portal/`: **The Cloud.** FastAPI backend for user management (optional).
 *   `docs/`: **The Library.** Documentation for users, agents, and developers.
 *   `scripts/`: **The Toolbox.** Helper scripts for building, testing, and deployment.
@@ -25,7 +25,7 @@ This document serves as a high-level map of the Rongle repository structure.
 *   `policy_engine/guardian.py`: Safety firewall for commands.
 *   `utils/keyboard_listener.py`: Handles stdin hotkeys (Dev Mode).
 
-### `frontend/`
+### `src/`
 *   `src/App.tsx`: Main UI component.
 *   `src/services/gemini.ts`: Client-side logic for "Direct Mode" VLM queries.
 *   `src/components/HardwareStatus.tsx`: Telemetry dashboard.
