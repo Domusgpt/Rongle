@@ -153,6 +153,19 @@ export interface UsageStats {
   tokens_output_total: number;
 }
 
+export interface AuditLogEntry {
+  id: string;
+  sequence: number;
+  timestamp: number;
+  timestamp_iso: string;
+  action: string;
+  action_detail: string;
+  screenshot_hash: string;
+  entry_hash: string;
+  policy_verdict: string;
+  device_id: string;
+}
+
 export const TIER_INFO: Record<SubscriptionTier, {
   name: string;
   quota: number;

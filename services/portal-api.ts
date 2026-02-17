@@ -13,6 +13,7 @@ import type {
   PortalUser,
   Subscription,
   UsageStats,
+  AuditLogEntry,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -254,8 +255,8 @@ export class PortalAPI {
   // -----------------------------------------------------------------------
   // Audit
   // -----------------------------------------------------------------------
-  async getAuditLog(deviceId: string, offset = 0, limit = 100): Promise<any[]> {
-    return this.request('GET', `/api/devices/${deviceId}/audit?offset=${offset}&limit=${limit}`);
+  async getAuditLog(deviceId: string, offset = 0, limit = 100): Promise<AuditLogEntry[]> {
+    return this.request<AuditLogEntry[]>('GET', `/api/devices/${deviceId}/audit?offset=${offset}&limit=${limit}`);
   }
 
   async verifyAuditChain(deviceId: string): Promise<{ status: string; entries_verified?: number }> {

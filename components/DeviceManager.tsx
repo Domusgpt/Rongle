@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { PortalDevice, Subscription, UsageStats } from '../types';
+import type { PortalDevice, Subscription, UsageStats, AuditLogEntry } from '../types';
 import { TIER_INFO } from '../types';
 import { portalAPI } from '../services/portal-api';
 import {
@@ -12,12 +12,6 @@ interface DeviceManagerProps {
   selectedDeviceId: string | null;
 }
 
-interface AuditLog {
-  timestamp: string;
-  level: string;
-  message: string;
-}
-
 export const DeviceManager: React.FC<DeviceManagerProps> = ({
   onSelectDevice,
   selectedDeviceId,
@@ -25,7 +19,7 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   const [devices, setDevices] = useState<PortalDevice[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [usage, setUsage] = useState<UsageStats | null>(null);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [newDeviceName, setNewDeviceName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -343,22 +337,42 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
                 </button>
               </div>
 
-              <div className="h-32 bg-black rounded border border-industrial-600 p-2 overflow-auto font-mono text-[10px] text-gray-400">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] text-gray-500 font-mono uppercase">Audit Log</span>
+              {auditLogs.length > 0 && (
+                <button
+                  onClick={() => setAuditLogs([])}
+                  className="text-[10px] text-gray-500 hover:text-white transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="h-32 bg-black rounded border border-industrial-600 p-2 overflow-auto font-mono text-[10px] text-gray-400">
               {auditLogs.length > 0 ? (
-                auditLogs.map((log, i) => (
-                  <div key={i} className="mb-1 border-b border-industrial-800 pb-1 last:border-0">
+                auditLogs.map((log) => (
+                  <div key={log.id} className="mb-1 border-b border-industrial-800 pb-1 last:border-0">
                     <span className="text-industrial-500">
-                      [{new Date(log.timestamp || Date.now()).toLocaleTimeString()}]
+                      [{new Date(log.timestamp_iso || log.timestamp * 1000).toLocaleTimeString()}]
                     </span>{' '}
-                    <span className={log.level === 'ERROR' ? 'text-terminal-red' : 'text-terminal-green'}>
-                      {log.message}
+                    <span className={
+                      log.policy_verdict === 'BLOCK' ? 'text-terminal-red' :
+                      log.action === 'ERROR' ? 'text-terminal-red' :
+                      log.action === 'WARNING' ? 'text-terminal-amber' :
+                      log.action === 'EXECUTE' ? 'text-terminal-blue' :
+                      log.action === 'PLAN' ? 'text-terminal-green' :
+                      'text-gray-300'
+                    }>
+                      {log.action}: {log.action_detail}
                     </span>
                   </div>
                 ))
               ) : (
-                <div className="text-gray-500 italic">Waiting for audit logs...</div>
+                <div className="text-gray-500 italic flex items-center justify-center h-full">
+                  Waiting for audit logs...
+                </div>
               )}
-              </div>
+            </div>
             </div>
           )}
         </div>
