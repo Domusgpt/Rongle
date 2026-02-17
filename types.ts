@@ -145,6 +145,26 @@ export interface Subscription {
   expires_at: string | null;
 }
 
+export interface UsageStats {
+  tier: string;
+  billing_cycle_start: string;
+  llm_calls_used: number;
+  llm_calls_quota: number;
+  tokens_input_total: number;
+  tokens_output_total: number;
+}
+
+export interface AuditLogEntry {
+  sequence: number;
+  timestamp: number;
+  timestamp_iso: string;
+  action: string;
+  action_detail: string;
+  screenshot_hash: string;
+  entry_hash: string;
+  policy_verdict: string;
+}
+
 export const TIER_INFO: Record<SubscriptionTier, {
   name: string;
   quota: number;

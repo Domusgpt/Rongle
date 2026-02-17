@@ -12,6 +12,8 @@ import type {
   PortalDevice,
   PortalUser,
   Subscription,
+  UsageStats,
+  AuditLogEntry,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -246,21 +248,15 @@ export class PortalAPI {
     return this.request<Subscription>('PUT', '/api/subscription/', { tier });
   }
 
-  async getUsage(): Promise<{
-    tier: string;
-    llm_calls_used: number;
-    llm_calls_quota: number;
-    tokens_input_total: number;
-    tokens_output_total: number;
-  }> {
-    return this.request('GET', '/api/subscription/usage');
+  async getUsage(): Promise<UsageStats> {
+    return this.request<UsageStats>('GET', '/api/subscription/usage');
   }
 
   // -----------------------------------------------------------------------
   // Audit
   // -----------------------------------------------------------------------
-  async getAuditLog(deviceId: string, offset = 0, limit = 100): Promise<any[]> {
-    return this.request('GET', `/api/devices/${deviceId}/audit?offset=${offset}&limit=${limit}`);
+  async getAuditLog(deviceId: string, offset = 0, limit = 100): Promise<AuditLogEntry[]> {
+    return this.request<AuditLogEntry[]>('GET', `/api/devices/${deviceId}/audit?offset=${offset}&limit=${limit}`);
   }
 
   async verifyAuditChain(deviceId: string): Promise<{ status: string; entries_verified?: number }> {

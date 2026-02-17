@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import type { PortalDevice, Subscription } from '../types';
+import React, { useState, useEffect, useCallback } from 'react';
+import type { PortalDevice, Subscription, UsageStats, AuditLogEntry } from '../types';
 import { TIER_INFO } from '../types';
 import { portalAPI } from '../services/portal-api';
 import {
@@ -18,7 +18,8 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
 }) => {
   const [devices, setDevices] = useState<PortalDevice[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [usage, setUsage] = useState<any>(null);
+  const [usage, setUsage] = useState<UsageStats | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [newDeviceName, setNewDeviceName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -31,8 +32,23 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
 
   // Poll for audit logs if a device is selected
   useEffect(() => {
-      // This is a placeholder for the audit log polling loop
-      // In a real implementation, we would call portalAPI.getAuditLogs(selectedDeviceId)
+    if (!selectedDeviceId || expandedSection !== 'telemetry') {
+      setAuditLogs([]);
+      return;
+    }
+
+    const fetchLogs = async () => {
+      try {
+        const logs = await portalAPI.getAuditLog(selectedDeviceId, 0, 50);
+        setAuditLogs(logs);
+      } catch (err) {
+        console.error('[DeviceManager] Failed to fetch audit logs:', err);
+      }
+    };
+
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 5000);
+    return () => clearInterval(interval);
   }, [selectedDeviceId, expandedSection]);
 
   const loadAll = async () => {
@@ -46,8 +62,8 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
       setDevices(devs);
       setSubscription(sub);
       setUsage(usg);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -61,8 +77,8 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
       setDevices(prev => [device, ...prev]);
       setNewDeviceName('');
       onSelectDevice(device);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -71,8 +87,8 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
       await portalAPI.deleteDevice(id);
       setDevices(prev => prev.filter(d => d.id !== id));
       if (selectedDeviceId === id) onSelectDevice(null);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -80,10 +96,22 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
     try {
       const updated = await portalAPI.regenerateDeviceKey(id);
       setDevices(prev => prev.map(d => d.id === id ? updated : d));
-    } catch (err: any) {
-      setError(err.message);
+      // If the selected device key was regenerated, we might need to update it
+      if (selectedDeviceId === id) {
+        onSelectDevice(updated);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
+
+  const handleManualSend = useCallback(() => {
+    if (!manualCmd.trim() || !selectedDeviceId) return;
+    console.log(`[DeviceManager] Sending manual command to ${selectedDeviceId}: ${manualCmd}`);
+    // In a full implementation, this would send via WebSocket
+    // For now, we'll just clear the input
+    setManualCmd('');
+  }, [manualCmd, selectedDeviceId]);
 
   const tierInfo = subscription ? TIER_INFO[subscription.tier] : TIER_INFO.free;
   const quotaPercent = subscription && subscription.llm_quota_monthly > 0
@@ -93,23 +121,43 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
   return (
     <div className="space-y-4">
       {error && (
-        <div className="bg-terminal-red/10 border border-terminal-red/30 rounded px-3 py-2 text-xs text-terminal-red font-mono">
-          {error}
+        <div className="bg-terminal-red/10 border border-terminal-red/30 rounded px-3 py-2 text-xs text-terminal-red font-mono flex justify-between items-center">
+          <span>{error}</span>
+          <button onClick={() => setError('')} className="ml-2 hover:text-white transition-colors">
+            <Plus size={14} className="rotate-45" />
+          </button>
         </div>
       )}
 
       {/* Devices Section */}
       <div className="bg-industrial-800 rounded-xl border border-industrial-700 overflow-hidden">
-        <button
-          onClick={() => setExpandedSection(expandedSection === 'devices' ? null : 'devices')}
-          className="w-full flex items-center justify-between p-4 hover:bg-industrial-700/50 transition-colors"
-        >
-          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-            <Smartphone size={16} className="text-terminal-blue" />
-            Devices ({devices.length})
-          </h3>
-          {expandedSection === 'devices' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
+        <div className="w-full flex items-center justify-between hover:bg-industrial-700/50 transition-colors">
+          <button
+            onClick={() => setExpandedSection(expandedSection === 'devices' ? null : 'devices')}
+            className="flex-1 flex items-center p-4 text-left"
+          >
+            <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+              <Smartphone size={16} className="text-terminal-blue" />
+              Devices ({devices.length})
+            </h3>
+          </button>
+          <div className="flex items-center gap-2 pr-4">
+            <button
+              onClick={(e) => { e.stopPropagation(); loadAll(); }}
+              className={`p-1 text-gray-500 hover:text-terminal-blue transition-all ${loading ? 'animate-spin text-terminal-blue' : ''}`}
+              title="Refresh all"
+              disabled={loading}
+            >
+              <RefreshCw size={14} />
+            </button>
+            <button
+              onClick={() => setExpandedSection(expandedSection === 'devices' ? null : 'devices')}
+              className="p-1 text-gray-500"
+            >
+              {expandedSection === 'devices' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+          </div>
+        </div>
 
         {expandedSection === 'devices' && (
           <div className="px-4 pb-4 space-y-3">
@@ -197,43 +245,6 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           {expandedSection === 'subscription' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
 
-      {/* Telemetry & Control Section */}
-      {selectedDeviceId && (
-      <div className="bg-industrial-800 rounded-xl border border-industrial-700 overflow-hidden">
-        <button
-          onClick={() => setExpandedSection(expandedSection === 'telemetry' ? null : 'telemetry')}
-          className="w-full flex items-center justify-between p-4 hover:bg-industrial-700/50 transition-colors"
-        >
-          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
-            <Activity size={16} className="text-terminal-green" />
-            Telemetry & Control
-          </h3>
-          {expandedSection === 'telemetry' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-
-        {expandedSection === 'telemetry' && (
-          <div className="px-4 pb-4 space-y-3">
-             <div className="flex gap-2">
-               <input
-                 type="text"
-                 value={manualCmd}
-                 onChange={e => setManualCmd(e.target.value)}
-                 className="flex-1 bg-black border border-industrial-600 rounded px-2 py-1 text-xs font-mono text-terminal-green"
-                 placeholder="Ducky Script (e.g. STRING Hello)"
-               />
-               <button className="bg-industrial-700 text-white px-2 py-1 rounded text-xs">
-                 <Command size={12} className="inline mr-1" /> Send
-               </button>
-             </div>
-
-             <div className="h-32 bg-black rounded border border-industrial-600 p-2 overflow-auto font-mono text-[10px] text-gray-400">
-               <div className="text-gray-500 italic">Waiting for audit logs...</div>
-             </div>
-          </div>
-        )}
-      </div>
-      )}
-
         {expandedSection === 'subscription' && subscription && (
           <div className="px-4 pb-4 space-y-3">
             {/* Quota bar */}
@@ -291,6 +302,81 @@ export const DeviceManager: React.FC<DeviceManagerProps> = ({
           </div>
         )}
       </div>
+
+      {/* Telemetry & Control Section */}
+      {selectedDeviceId && (
+        <div className="bg-industrial-800 rounded-xl border border-industrial-700 overflow-hidden">
+          <button
+            onClick={() => setExpandedSection(expandedSection === 'telemetry' ? null : 'telemetry')}
+            className="w-full flex items-center justify-between p-4 hover:bg-industrial-700/50 transition-colors"
+          >
+            <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+              <Activity size={16} className="text-terminal-green" />
+              Telemetry & Control
+            </h3>
+            {expandedSection === 'telemetry' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+
+          {expandedSection === 'telemetry' && (
+            <div className="px-4 pb-4 space-y-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={manualCmd}
+                  onChange={e => setManualCmd(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleManualSend()}
+                  className="flex-1 bg-black border border-industrial-600 rounded px-2 py-1 text-xs font-mono text-terminal-green focus:outline-none focus:border-terminal-green/50"
+                  placeholder="Ducky Script (e.g. STRING Hello)"
+                />
+                <button
+                  onClick={handleManualSend}
+                  disabled={!manualCmd.trim()}
+                  className="bg-industrial-700 hover:bg-industrial-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-2 py-1 rounded text-xs transition-colors"
+                >
+                  <Command size={12} className="inline mr-1" /> Send
+                </button>
+              </div>
+
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] text-gray-500 font-mono uppercase">Audit Log</span>
+              {auditLogs.length > 0 && (
+                <button
+                  onClick={() => setAuditLogs([])}
+                  className="text-[10px] text-gray-500 hover:text-white transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="h-32 bg-black rounded border border-industrial-600 p-2 overflow-auto font-mono text-[10px] text-gray-400">
+              {auditLogs.length > 0 ? (
+                auditLogs.map((log) => (
+                  <div key={log.sequence} className="mb-1 border-b border-industrial-800 pb-1 last:border-0">
+                    <span className="text-industrial-500">
+                      [{new Date(log.timestamp_iso || log.timestamp * 1000).toLocaleTimeString()}]
+                    </span>{' '}
+                    <span className={
+                      log.policy_verdict === 'BLOCK' ? 'text-terminal-red' :
+                      log.action === 'ERROR' ? 'text-terminal-red' :
+                      log.action === 'WARNING' ? 'text-terminal-amber' :
+                      log.action === 'EXECUTE' ? 'text-terminal-blue' :
+                      log.action === 'PLAN' ? 'text-terminal-green' :
+                      'text-gray-300'
+                    }>
+                      {log.action}: {log.action_detail}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-gray-500 italic flex items-center justify-center h-full">
+                  Waiting for audit logs...
+                </div>
+              )}
+            </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
