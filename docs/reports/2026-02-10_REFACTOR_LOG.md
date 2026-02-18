@@ -29,8 +29,14 @@ This report summarizes the refactoring of the `DuckyScriptParser` module and the
 - **Dependency Consolidation:** Updated `rng_operator/requirements.txt` with `aiortc` and `aiohttp` to support WebRTC natively in the new structure.
 - **Path Standardization:** Updated all scripts, config files, and tests to reference the unified paths.
 
+### 5. Advanced Feedback & UX
+- **Visual Servoing:** Re-integrated closed-loop mouse correction into the async actuation task, allowing for real-time cursor alignment after the initial move.
+- **Proactive Validation:** Added a `validate` method to `DuckyScriptParser` to catch syntax errors before script execution.
+- **WebRTC UX:** Added a user-facing toggle in the Frontend dashboard to enable/disable WebRTC streaming to the backend.
+
 ## Verification Results
 - **Core Logic Tests:** 126/126 PASSED (including Parser, Humanizer, Policy Guardian, and Audit Logger).
+- **Compilation Check:** All `rng_operator` modules verified for import correctness and syntax.
 
 ---
 *End of Report*

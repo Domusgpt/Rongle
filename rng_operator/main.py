@@ -147,6 +147,9 @@ async def actuation_task(
     hid: HIDGadget,
     parser: DuckyScriptParser,
     calibrator: HomographyCalibrator,
+    tracker: ReflexTracker,
+    grabber: FrameGrabber,
+    servo: VisualServo,
     guardian: PolicyGuardian,
     estop: EmergencyStop,
     audit: AuditLogger,
@@ -185,16 +188,38 @@ async def actuation_task(
                 end_hid_x = action.target_norm[0] * sx
                 end_hid_y = action.target_norm[1] * sy
 
-                # Use Humanizer (blocking, fast)
+                # 1. Open-loop Move (Bezier Path)
                 points = parser.humanizer.bezier_path(start_hid_x, start_hid_y, end_hid_x, end_hid_y)
-
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, hid.send_mouse_path, points)
 
-                # Click
+                # 2. Closed-loop Correction (Visual Servoing)
+                servo_steps = 0
+                max_servo_steps = 3
+                while servo_steps < max_servo_steps:
+                    s_frame = await grabber.wait_for_frame()
+                    s_det = tracker.detect(s_frame.image)
+                    if not s_det:
+                        break
+
+                    # Map target_norm to current image pixels
+                    tx_img = action.target_norm[0] * s_frame.width
+                    ty_img = action.target_norm[1] * s_frame.height
+
+                    dx, dy = servo.compute_correction(s_det.x, s_det.y, int(tx_img), int(ty_img))
+                    if dx == 0 and dy == 0:
+                        break
+
+                    from .hygienic_actuator.ducky_parser import MouseReport
+                    report = MouseReport(buttons=0, dx=dx, dy=dy, wheel=0)
+                    await loop.run_in_executor(None, hid._write_mouse, report.pack())
+                    await asyncio.sleep(0.1)
+                    servo_steps += 1
+
+                # 3. Click
                 await loop.run_in_executor(None, hid.send_mouse_click, 1) # Left click
 
-                audit.log("EXECUTE", action_detail=f"Moved and Clicked: {action.label}")
+                audit.log("EXECUTE", action_detail=f"Moved and Clicked: {action.label} (servo_steps={servo_steps})")
 
             elif action.kind == "TYPE" and action.text:
                 loop = asyncio.get_running_loop()
@@ -387,7 +412,8 @@ async def main_async() -> None:
         grabber.start_streaming(loop=loop)
 
         # Initial Calibration
-        await asyncio.sleep(2.0)
+        logger.info("Waiting for first frame...")
+        await grabber.wait_for_frame()
 
         try:
              if not args.dry_run:
@@ -419,7 +445,8 @@ async def main_async() -> None:
                 calibrator, session_mgr, current_session, stop_event, audit, goal
             )),
             asyncio.create_task(actuation_task(
-                action_queue, hid, ducky_parser, calibrator, guardian,
+                action_queue, hid, ducky_parser, calibrator, tracker,
+                grabber, servo, guardian,
                 estop, audit, session_mgr, current_session, stop_event
             ))
         ]

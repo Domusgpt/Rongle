@@ -227,6 +227,21 @@ class DuckyScriptParser:
         """Lazily yield commands (useful for streaming execution)."""
         yield from self.parse(script)
 
+    def validate(self, script: str) -> list[str]:
+        """
+        Scan the script for syntax errors without executing.
+        Returns a list of error messages (empty if valid).
+        """
+        errors = []
+        lines = script.strip().splitlines()
+        for i, line in enumerate(lines, 1):
+            line = line.strip()
+            if not line or self._RE_REM.match(line) or self._RE_REPEAT.match(line):
+                continue
+            if self._parse_line(line) is None:
+                errors.append(f"Line {i}: Unknown or invalid command: {line}")
+        return errors
+
     # ------------------------------------------------------------------
     # Character-level helpers
     # ------------------------------------------------------------------
