@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { LogEntry, LogLevel } from '../types';
-import { Terminal, CheckCircle, AlertTriangle, Info, PlayCircle } from 'lucide-react';
+import { Terminal, CheckCircle, AlertTriangle, Info, PlayCircle, Download } from 'lucide-react';
 
 interface ActionLogProps {
   logs: LogEntry[];
@@ -12,6 +12,17 @@ export const ActionLog: React.FC<ActionLogProps> = ({ logs }) => {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
+
+  const downloadLogs = () => {
+    const data = JSON.stringify(logs, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rongle-logs-${new Date().toISOString()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const getIcon = (level: LogLevel) => {
     switch (level) {
@@ -40,7 +51,16 @@ export const ActionLog: React.FC<ActionLogProps> = ({ logs }) => {
           <Terminal size={16} className="text-gray-400" />
           <h3 className="text-sm font-semibold text-gray-200">System Log & Audit Trail</h3>
         </div>
-        <span className="text-xs text-gray-500 font-mono">/var/log/agent.log</span>
+        <div className="flex items-center gap-3">
+            <button
+                onClick={downloadLogs}
+                className="text-xs text-gray-400 hover:text-white flex items-center gap-1 transition-colors"
+                title="Download JSON Logs"
+            >
+                <Download size={12} /> Export
+            </button>
+            <span className="text-xs text-gray-500 font-mono hidden sm:inline">/var/log/agent.log</span>
+        </div>
       </div>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-3 font-mono text-sm">

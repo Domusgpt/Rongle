@@ -65,6 +65,7 @@ const INITIAL_CONFIG: AgentConfig = {
   pollIntervalMs: 3000,
   annotationsEnabled: true,
   useLLMProxy: false,
+  streamToBackend: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -497,6 +498,7 @@ export default function App() {
                   onAnnotatedFrame={handleAnnotatedFrame}
                   isProcessing={status === AgentStatus.PERCEIVING}
                   annotationsEnabled={config.annotationsEnabled}
+                  streamToBackend={config.streamToBackend}
                   onCameraActive={(active) => setHardware(prev => ({ ...prev, cameraActive: active }))}
                 />
                 {showCnnOverlay && cnnEnabled && (
@@ -759,6 +761,9 @@ export default function App() {
                     onToggle={() => setConfig(p => ({ ...p, useLLMProxy: !p.useLLMProxy }))}
                     color="bg-purple-500" />
                 )}
+                <ToggleRow label="Stream to Backend (WebRTC)" active={config.streamToBackend}
+                  onToggle={() => setConfig(p => ({ ...p, streamToBackend: !p.streamToBackend }))}
+                  color="bg-orange-500" />
 
                 {/* API Key input for direct mode */}
                 {!config.useLLMProxy && (
