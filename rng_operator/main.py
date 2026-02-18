@@ -21,6 +21,9 @@ from pathlib import Path
 
 from .config.settings import Settings
 from .hygienic_actuator import DuckyScriptParser, EmergencyStop, HIDGadget, Humanizer
+from .hal.base import VideoSource, HIDActuator
+from .hal.pi_hal import PiVideoSource, PiHIDActuator
+from .hal.desktop_hal import DesktopVideoSource, DesktopHIDActuator
 from .immutable_ledger import AuditLogger
 from .policy_engine import PolicyGuardian, PolicyVerdict
 from .visual_cortex import FrameGrabber, ReflexTracker, VLMReasoner, FastDetector
@@ -321,6 +324,18 @@ async def main_async() -> None:
         screen_h=settings.screen_height,
         humanizer=humanizer,
     )
+
+    # HAL Selection
+    if args.dry_run:
+        logger.info("Using Desktop Simulation HAL")
+        video_source = DesktopVideoSource(width=settings.screen_width, height=settings.screen_height)
+        hid_actuator = DesktopHIDActuator()
+    else:
+        logger.info("Using Pi Hardware HAL")
+        video_source = PiVideoSource(device=settings.video_device, width=settings.screen_width, height=settings.screen_height)
+        hid_actuator = PiHIDActuator(kbd_dev=settings.hid_keyboard_dev, mouse_dev=settings.hid_mouse_dev)
+
+    # Legacy HIDGadget for backward compatibility with parser logic (internal usage)
     hid = HIDGadget(
         keyboard_dev=settings.hid_keyboard_dev,
         mouse_dev=settings.hid_mouse_dev,
@@ -350,6 +365,7 @@ async def main_async() -> None:
         cursor_templates_dir=settings.cursor_templates_dir,
     )
     detector = FastDetector()
+    servo = VisualServo()
     guardian = PolicyGuardian(allowlist_path=settings.allowlist_path)
     audit = AuditLogger(log_path=settings.audit_log_path)
     session_mgr = SessionManager(
@@ -420,7 +436,10 @@ async def main_async() -> None:
                  if args.webrtc:
                      logger.info("Waiting for WebRTC frame for calibration...")
                      # Implicitly wait_for_frame inside calibrate will block until connected
-                 await calibrator.calibrate(hid, grabber, tracker)
+                 cal_res = await calibrator.calibrate(hid, grabber, tracker)
+                 servo.set_scale(cal_res.sensitivity_x, cal_res.sensitivity_y)
+                 logger.info("Calibration successful. Servo scale set to (%.2f, %.2f)",
+                             cal_res.sensitivity_x, cal_res.sensitivity_y)
              else:
                  logger.info("Dry run: Skipping calibration")
         except Exception as e:

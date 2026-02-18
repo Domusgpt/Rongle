@@ -34,6 +34,12 @@ This report summarizes the refactoring of the `DuckyScriptParser` module and the
 - **Proactive Validation:** Added a `validate` method to `DuckyScriptParser` to catch syntax errors before script execution.
 - **WebRTC UX:** Added a user-facing toggle in the Frontend dashboard to enable/disable WebRTC streaming to the backend.
 
+### 6. Hardware Abstraction & Intelligence Port
+- **HAL Integration:** Implemented the Hardware Abstraction Layer (`hal/`) to decouple logic from specific drivers, enabling seamless switching between Raspberry Pi hardware and Desktop simulation.
+- **CNN Training Harness:** Ported the complete training pipeline (`training/`) from the refactor branch, providing the foundation for fine-tuning local UI detection models.
+- **OCR Capability:** Migrated Tesseract-based OCR services to the frontend to enable local text recognition.
+- **Frontend Polish:** Integrated improved telemetry and logging components from the experimental refactor branch.
+
 ## Verification Results
 - **Core Logic Tests:** 126/126 PASSED (including Parser, Humanizer, Policy Guardian, and Audit Logger).
 - **Compilation Check:** All `rng_operator` modules verified for import correctness and syntax.
