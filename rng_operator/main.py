@@ -147,7 +147,7 @@ async def perception_task(
 
 async def actuation_task(
     queue: asyncio.Queue[AgentAction],
-    hid: HIDGadget,
+    hid: HIDActuator,
     parser: DuckyScriptParser,
     calibrator: HomographyCalibrator,
     tracker: ReflexTracker,
@@ -213,9 +213,7 @@ async def actuation_task(
                     if dx == 0 and dy == 0:
                         break
 
-                    from .hygienic_actuator.ducky_parser import MouseReport
-                    report = MouseReport(buttons=0, dx=dx, dy=dy, wheel=0)
-                    await loop.run_in_executor(None, hid._write_mouse, report.pack())
+                    await loop.run_in_executor(None, hid.send_mouse_move, dx, dy)
                     await asyncio.sleep(0.1)
                     servo_steps += 1
 
@@ -226,7 +224,12 @@ async def actuation_task(
 
             elif action.kind == "TYPE" and action.text:
                 loop = asyncio.get_running_loop()
-                await loop.run_in_executor(None, hid.send_string, action.text)
+                # For simplicity, send string character by character via HAL
+                # A better approach would be characterize send_string in HAL
+                for ch in action.text:
+                    report = DuckyScriptParser.char_to_report(ch)
+                    await loop.run_in_executor(None, hid.send_key, report.keys[0], report.modifier)
+                    await asyncio.sleep(0.012)
                 audit.log("EXECUTE", action_detail=f"Typed: {action.text}")
 
             # Update Session (Persistence)
@@ -354,7 +357,7 @@ async def main_async() -> None:
         webrtc_server = WebRTCServer(webrtc_receiver, port=8080) # Using 8080 or configurable?
 
     grabber = FrameGrabber(
-        device=settings.video_device,
+        video_source=video_source,
         width=settings.screen_width,
         height=settings.screen_height,
         fps=settings.capture_fps,
@@ -414,7 +417,8 @@ async def main_async() -> None:
 
     # --- Start Lifecycle ---
     try:
-        hid.open()
+        hid_actuator.open()
+        video_source.open()
         estop.start()
 
         loop = asyncio.get_running_loop()
@@ -464,7 +468,7 @@ async def main_async() -> None:
                 calibrator, session_mgr, current_session, stop_event, audit, goal
             )),
             asyncio.create_task(actuation_task(
-                action_queue, hid, ducky_parser, calibrator, tracker,
+                action_queue, hid_actuator, ducky_parser, calibrator, tracker,
                 grabber, servo, guardian,
                 estop, audit, session_mgr, current_session, stop_event
             ))
@@ -485,10 +489,11 @@ async def main_async() -> None:
         if webrtc_receiver:
             await webrtc_receiver.close()
 
-        hid.release_all()
+        hid_actuator.release_all()
         estop.stop()
         grabber.close()
-        hid.close()
+        video_source.close()
+        hid_actuator.close()
         audit.close()
 
 def main() -> None:

@@ -49,14 +49,16 @@ class CapturedFrame:
         return cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
 
 
+from ..hal.base import VideoSource
+
 class FrameGrabber:
     """
-    Continuous frame capture from a V4L2 device or WebRTC receiver.
+    Continuous frame capture from a VideoSource or WebRTC receiver.
 
     Parameters
     ----------
-    device : str | int
-        V4L2 device path (e.g., ``/dev/video0``) or index.
+    video_source : VideoSource | None
+        HAL video source.
     width : int
         Capture width in pixels.
     height : int
@@ -64,24 +66,24 @@ class FrameGrabber:
     fps : int
         Desired capture frame rate.
     receiver : WebRTCReceiver | None
-        Optional WebRTC receiver source. If provided, 'device' is ignored.
+        Optional WebRTC receiver source. If provided, 'video_source' is ignored.
     """
 
     def __init__(
         self,
-        device: str | int = "/dev/video0",
+        video_source: VideoSource | None = None,
         width: int = 1920,
         height: int = 1080,
         fps: int = 30,
         receiver: Any | None = None,
     ) -> None:
-        self.device = device
+        self.video_source = video_source
         self.width = width
         self.height = height
         self.fps = fps
         self.receiver = receiver
 
-        self._cap: cv2.VideoCapture | None = None
+        self._cap: Any | None = None
         self._lock = threading.Lock()
         self._latest_frame: CapturedFrame | None = None
         self._seq = 0
@@ -101,40 +103,20 @@ class FrameGrabber:
             logger.info("FrameGrabber using WebRTC receiver source")
             return
 
-        # Check if device is a network URL (IP Webcam) or local device
-        if isinstance(self.device, str) and (self.device.startswith("http") or self.device.startswith("rtsp")):
-            logger.info("Opening network stream: %s", self.device)
-            # FFMPEG backend is better for network streams
-            self._cap = cv2.VideoCapture(self.device, cv2.CAP_FFMPEG)
-        else:
-            self._cap = cv2.VideoCapture(self.device, cv2.CAP_V4L2)
+        if self.video_source:
+             self.video_source.open()
+             logger.info("FrameGrabber using HAL video source")
+             return
 
-        if not self._cap.isOpened():
-            raise RuntimeError(f"Cannot open video device: {self.device}")
-
-        # Setting props might not work on streams, but we try
-        try:
-            self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-            self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-            self._cap.set(cv2.CAP_PROP_FPS, self.fps)
-        except Exception:
-            pass
-
-        actual_w = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        actual_h = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        logger.info(
-            "FrameGrabber opened %s @ %dx%d",
-            self.device, actual_w, actual_h,
-        )
+        raise RuntimeError("No video source or receiver provided")
 
     def close(self) -> None:
         """Release the capture device."""
         self._running = False
         if self._thread is not None:
             self._thread.join(timeout=3.0)
-        if self._cap is not None:
-            self._cap.release()
-            self._cap = None
+        if self.video_source:
+            self.video_source.close()
 
     def __enter__(self) -> FrameGrabber:
         self.open()
@@ -149,36 +131,22 @@ class FrameGrabber:
     def grab(self) -> CapturedFrame:
         """Capture and return a single frame (blocking)."""
         if self.receiver:
-            # Sync grab from receiver (polling latest)
             img, ts, seq = self.receiver.get_latest_frame()
             if img is None:
-                # If no frame yet, wait briefly? or raise?
-                # For compatibility with polling loops, we might sleep and retry?
-                # But grab() usually blocks.
-                # Since receiver is async populated, we can't easily block here without loop.
-                # Just raise or return None (but return type is CapturedFrame).
-                # We'll rely on the caller handling exceptions or retrying.
                 raise RuntimeError("No WebRTC frame available yet")
-
-            # Use receiver's sequence or maintain our own? Receiver has one.
-            # Hash
             frame_hash = hashlib.sha256(img.tobytes()).hexdigest()
             return CapturedFrame(image=img, timestamp=ts, sequence=seq, sha256=frame_hash)
 
-        if self._cap is None or not self._cap.isOpened():
-            raise RuntimeError("FrameGrabber not opened")
+        if self.video_source is None:
+            raise RuntimeError("FrameGrabber not opened (no video source)")
 
-        ret, frame = self._cap.read()
-        if not ret or frame is None:
-            raise RuntimeError("Frame capture failed — check HDMI signal")
-
+        frame = self.video_source.grab()
         self._seq += 1
-        ts = time.time()
-        frame_hash = hashlib.sha256(frame.tobytes()).hexdigest()
+        frame_hash = hashlib.sha256(frame.image.tobytes()).hexdigest()
 
         return CapturedFrame(
-            image=frame,
-            timestamp=ts,
+            image=frame.image,
+            timestamp=frame.timestamp,
             sequence=self._seq,
             sha256=frame_hash,
         )
