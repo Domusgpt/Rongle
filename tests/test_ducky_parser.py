@@ -2,7 +2,7 @@
 
 import struct
 import pytest
-from rng_operator.hygienic_actuator.ducky_parser import (
+from rongle_operator.hygienic_actuator.ducky_parser import (
     DuckyScriptParser,
     KeyboardReport,
     MouseReport,
@@ -13,7 +13,7 @@ from rng_operator.hygienic_actuator.ducky_parser import (
     _SPECIAL_KEYS,
     _MODIFIER_ALIASES,
 )
-from rng_operator.hygienic_actuator.humanizer import Humanizer
+from rongle_operator.hygienic_actuator.humanizer import Humanizer
 
 
 # ---------------------------------------------------------------------------
