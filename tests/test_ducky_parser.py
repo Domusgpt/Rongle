@@ -307,12 +307,13 @@ class TestMultiLineScripts:
         STRING Hello World
         """
         cmds = parser.parse(script)
-        assert len(cmds) == 5
+        assert len(cmds) == 6
         assert cmds[0].kind == "keyboard"  # GUI r
         assert cmds[1].kind == "delay"     # DELAY 500
         assert cmds[2].kind == "string"    # STRING notepad
         assert cmds[3].kind == "keyboard"  # ENTER
-        assert cmds[4].kind == "string"    # STRING Hello World
+        assert cmds[4].kind == "delay"     # DELAY 1000
+        assert cmds[5].kind == "string"    # STRING Hello World
 
     def test_raw_line_preserved(self, parser):
         cmds = parser.parse("STRING test line")

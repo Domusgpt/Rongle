@@ -1,85 +1,57 @@
-# Engineering Critique & Technical Debt Analysis
+# Engineering Critique & Technical Debt Assessment
 
-This document outlines critical engineering flaws, scalability bottlenecks, and technical debt identified within the Rongle codebase.
+**Date:** February 2025
+**Reviewer:** Jules (AI Agent)
 
-## 1. Reliability & Stability (Must Fix)
+This document provides a critical analysis of the current Rongle codebase (`rng_operator`, `portal`, `frontend`). It highlights areas of concern, technical debt, and potential failure points.
 
-### Critical: Lack of Persistent Agent State
-The `rongle_operator` runs a stateless loop (`agent_loop` in `main.py`). If the process crashes or is restarted (e.g., by a watchdog), the agent loses all context:
-- It forgets the current `goal`.
-- It forgets `previous_action`.
-- It re-runs calibration unnecessarily.
+## 1. Architectural Debt
 
-**Recommendation:** Implement a `StateStore` (SQLite/JSON) that persists the current goal, step index, and context. On startup, check for an active session and resume.
+### 1.1 The "God Loop" in `main.py`
+*   **Issue:** The `agent_loop` function in `rng_operator/main.py` is becoming a monolith. It handles VLM perception, path planning, safety checks, HID execution, and audit logging all in one procedural block.
+*   **Risk:** High coupling makes it difficult to unit test specific behaviors (e.g., testing "planning" without mocking "execution").
+*   **Severity:** **High**
 
-### Critical: Fragile API Key Handling
-While the frontend now proxies VLM calls, the `PortalClient` in `rongle_operator/portal_client.py` relies on a long-lived `api_key` passed in `__init__`. There is no logic to:
-- Refresh tokens.
-- Handle `401 Unauthorized` gracefully (e.g., re-authenticate).
-- Rotate keys.
+### 1.2 Frontend-Backend Coupling via IP Webcam
+*   **Issue:** The system relies heavily on "IP Webcam" (an external Android app) for vision. This introduces latency (HTTP MJPEG stream) and a dependency on a 3rd-party app that might be killed by the OS.
+*   **Risk:** Production unreliability. If the Wi-Fi glitches, the "Eye" goes blind, but the "Hand" might still be moving.
+*   **Severity:** **Medium** (Acceptable for Alpha, fatal for Production).
 
-**Recommendation:** Implement a robust `AuthManager` class that handles token lifecycle, including refresh flows.
+### 1.3 Hardcoded Calibration
+*   **Issue:** The `calibrate` function assumes a linear, unrotated relationship between mouse deltas and screen pixels.
+*   **Risk:** Fails on curved monitors, rotated screens, or systems with mouse acceleration enabled.
+*   **Severity:** **Medium**
 
-### Major: Unhandled Hardware Failures
-The `FrameGrabber` raises `RuntimeError` on capture failure. In `main.py`, this is caught, but `HIDGadget` write failures are not consistently handled. If the USB cable is disconnected, the daemon may zombie or crash without alerting the portal.
+## 2. Security Risks
 
-**Recommendation:** Wrap hardware I/O in retry logic with exponential backoff and send a "Hardware Fault" telemetry event to the portal.
+### 2.1 Dev Mode "Konami Code"
+*   **Issue:** While cool, enabling a "God Mode" override via `stdin` input ("Konami Code") is a security backdoor if the terminal is accessible via SSH or exposed logs.
+*   **Risk:** An attacker with shell access can bypass the Policy Guardian.
+*   **Severity:** **High** (in deployed environments).
 
-## 2. Scalability (Should Fix)
+### 2.2 Unencrypted Local Logs
+*   **Issue:** Audit logs are stored in plain JSONL at `/mnt/secure/audit.jsonl`.
+*   **Risk:** If the physical device is stolen, the logs (containing potentially sensitive screen hashes and actions) are readable.
+*   **Severity:** **Medium**
 
-### Major: Database Concurrency
-The Portal defaults to `sqlite+aiosqlite`. While async, SQLite has a single write lock. High-frequency telemetry from multiple devices will cause `database is locked` errors.
+## 3. Performance Bottlenecks
 
-**Recommendation:**
-1. Enforce `PostgreSQL` for production via strict env checks.
-2. Implement connection pooling (SQLAlchemy `pool_size`).
-3. Batch telemetry writes (e.g., buffer logs in Redis and bulk-insert to Postgres).
+### 3.1 Synchronous VLM Calls
+*   **Issue:** `VLMReasoner` makes blocking HTTP calls to Gemini. The entire agent loop freezes while waiting for the API.
+*   **Impact:** Cycle time is ~1-2 seconds. Smooth visual servoing requires <100ms.
+*   **Severity:** **High**
 
-### Major: Synchronous Blocks in Async Code
-Review `portal/app.py`. While mostly async, ensuring no blocking calls (like standard `open()` or synchronous `requests`) slip into the event loop is crucial.
+### 3.2 MJPEG Decoding
+*   **Issue:** `FrameGrabber` with `cv2.VideoCapture` on HTTP streams can block indefinitely if the network stalls.
+*   **Impact:** Agent hangs.
+*   **Severity:** **Medium**
 
-**Recommendation:** Audit all I/O paths. Ensure `PortalClient` uses `aiofiles` for any local file operations (e.g., saving settings).
+## 4. Code Hygiene
 
-## 3. Maintainability (Improvement)
+### 4.1 Type Safety
+*   **Issue:** Python code is mostly typed, but some areas (especially `kwargs` in VLM backends) are loose.
+*   **Risk:** Runtime type errors.
 
-### Minor: Hardcoded Paths & Constants
-- `/mnt/secure/audit.jsonl` is hardcoded in defaults.
-- `/dev/video0` and `/dev/hidg*` are hardcoded.
-- `assets/cursors` is expected but not checked for existence during build.
-
-**Recommendation:**
-- Move all paths to a validated `config.yaml` or `.env` loader.
-- Use `pathlib` consistently.
-- Add a `check_environment()` startup routine that verifies hardware paths exist before entering the main loop.
-
-### Minor: Code Duplication
-- `training/data_collector.py` re-implements capture logic similar to `operator/visual_cortex/frame_grabber.py`.
-- `ducky_parser.py` exists in both backend and potentially logic in frontend (for validation).
-
-**Recommendation:** Refactor shared logic into a `rongle_common` package or strictly import.
-
-## 4. Security (Critical)
-
-### Critical: Merkle Chain Storage
-The audit log is stored at `/mnt/secure/audit.jsonl`. If this is just a folder on the root partition, "tamper-evidence" is weak because a root attacker can delete the file.
-
-**Recommendation:**
-- If possible, mount a separate, read-only-after-write partition.
-- Or, strictly stream logs to the Portal immediately and treat the local copy as a temporary buffer.
-
-### Major: No TLS Pinning
-`PortalClient` connects to `https://portal.rongle.io` relying on the system CA. A compromised device could be Man-in-the-Middle'd.
-
-**Recommendation:** Implement certificate pinning in `httpx` client.
-
-## 5. Vision Architecture
-
-### Major: Stubbed Detectors
-`FastDetector` is currently a stub. The system claims "Foveated Rendering" but falls back to full-frame VLM immediately. This is misleading and inefficient.
-
-**Recommendation:**
-- Prioritize training a quantized MobileNet-SSD.
-- Integrate `onnxruntime` to run the model.
-
----
-[Back to Documentation Index](INDEX.md)
+### 4.2 Test Coverage Gaps
+*   **Issue:** `rng_operator/visual_cortex` has minimal unit tests because mocking OpenCV/V4L2 is difficult.
+*   **Risk:** Regressions in vision logic are hard to catch without physical hardware.
