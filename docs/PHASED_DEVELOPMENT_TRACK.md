@@ -11,11 +11,12 @@ This document outlines the strategic roadmap for evolving Rongle from a unified 
 ### 1.1 CNN Fine-Tuning & Integration
 - **Goal:** Move from "random weights" to a production-grade UI element detector.
 - **Status:** **In-Progress.** Training harness has been ported to `rng_operator/training/`.
-- **Tasks:**
-    - Collect and label 1,000+ screenshots from the target environment.
-    - Run the `rng_operator/training/train.py` script on a GPU-enabled machine.
-    - Validate the ONNX export and integrate it into `ReflexTracker`.
-- **Outcome:** Sub-50ms detection of buttons, inputs, and icons without VLM latency.
+- **2026 Industry Standard Requirements:**
+    - **Dataset:** 5,000+ high-resolution screenshots across Windows, Linux, macOS, and Android.
+    - **Architecture:** Transition from SSDLite-MobileNetV3 to a modern lightweight backbone (e.g., FastViT or YOLOv11-nano).
+    - **Augmentation:** Advanced simulation of HDMI artifacts (compression, chromatic aberration, scanlines).
+    - **Quantization:** Mixed-precision training (FP16) and INT8 post-training quantization for edge TPU support.
+- **Outcome:** Sub-20ms detection of UI elements with >95% mAP@0.5.
 
 ### 1.2 Local VLM Optimization (Quantization)
 - **Goal:** Run `SmolVLM` at usable speeds (1-2s inference) on Pi Zero 2 W or Android.

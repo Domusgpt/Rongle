@@ -1,69 +1,80 @@
-# Rongle — The Hardware-Isolated Agentic Operator
+# Rongle — The Hardware-Isolated Agentic Operator 🦆
 
 [![Status](https://img.shields.io/badge/Status-Alpha-yellow)]()
+[![License](https://img.shields.io/badge/License-MIT-green)]()
 [![Python](https://img.shields.io/badge/Python-3.12-blue)]()
 [![React](https://img.shields.io/badge/React-19-cyan)]()
 
-**Rongle** is an autonomous AI agent that controls computers physically. It sees the screen via HDMI capture and types on the keyboard via USB emulation. Because it runs on separate hardware (e.g., a Raspberry Pi), it is undetectable by software anti-cheat/anti-bot systems and immune to malware on the target machine.
+**Rongle** is an autonomous AI agent designed to bridge the gap between high-level reasoning and physical hardware actuation. Unlike traditional automation, Rongle operates through a **Hardware Air-Gap**, seeing the screen via HDMI capture and interacting via standard USB keyboard/mouse emulation.
 
-## 📚 Documentation Suite
+> "Undetectable. Immutable. Autonomous."
 
-We maintain professional-grade documentation for both human developers and AI agents.
+---
 
-*   **[System Status](docs/SYSTEM_STATUS.md):** Current health, feature maturity, and known issues.
-*   **[Architecture](docs/ARCHITECTURE.md):** High-level design, security model (Air-gap, Policy Engine), and data flow.
-*   **[Agent Guide](docs/AGENTS.md):**  **Start here if you are an AI.** Codebase topology, coding standards, and directives.
-*   **[API Reference](docs/API_REFERENCE.md):** Detailed class/method documentation for Backend and Frontend.
-*   **[Development Plan](DEVELOPMENT_PLAN.md):** Roadmap for "The Ultimate Product" (Android, CNNs, Dynamic Scripting).
+## 🏗️ Core Architecture
+
+Rongle follows a robust, modular design consisting of three primary layers:
+
+1.  **`rng_operator` (The Brain):** An asynchronous Python daemon running on a Raspberry Pi or specialized Android device. It handles the OODA loop: **Observe** (OpenCV/V4L2), **Orient** (CNN/Reflex), **Decide** (Gemini/SmolVLM), and **Act** (USB HID).
+2.  **Rongle Frontend (The Dashboard):** A high-performance React PWA providing real-time telemetry, live vision streaming (WebRTC), and agent goal management.
+3.  **Hygienic HAL (The Interface):** A Hardware Abstraction Layer that ensures the agent can run on diverse targets, from Raspberry Pi Zero 2 W to native Desktop Simulations.
+
+---
+
+## 🧠 Key Capabilities
+
+*   **Generative Ducky Script:** The agent doesn't follow fixed scripts; it identifies UI elements and generates its own automation code on the fly.
+*   **Closed-Loop Visual Servoing:** Precision mouse control that corrects for hand jitter and resolution mismatches in real-time.
+*   **Merkle Audit Chain:** Every action is cryptographically hashed and linked, creating an immutable record of agent behavior.
+*   **Policy Guardian:** A hardware-enforced safety engine that blocks destructive commands and protects sensitive screen regions.
 
 ---
 
 ## 🚀 Quick Start
 
-### Hardware Requirements
-*   **Compute:** Raspberry Pi Zero 2 W (or 4/5), or an Android Device (with root/custom kernel for HID).
-*   **Vision:** HDMI-to-CSI bridge (TC358743) or IP Webcam app.
-*   **Input:** USB OTG cable.
+### 1. Prerequisites
+- **Hardware:** Raspberry Pi Zero 2 W OR a laptop with a USB-to-HDMI capture card.
+- **Python:** 3.12+
+- **Node.js:** 20+
 
-### Installation
+### 2. Installation
+```bash
+# Clone the repo
+git clone https://github.com/Domusgpt/Rongle.git
+cd Rongle
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/Domusgpt/Rongle.git
-    cd Rongle
-    ```
+# Install all dependencies (System, Python, Node)
+./scripts/rongle setup
+```
 
-2.  **Install Backend Dependencies:**
-    ```bash
-    pip install -r rng_operator/requirements.txt
-    ```
+### 3. Launch the Operator
+```bash
+# Run in Dry-Run mode (Simulated screen and HID)
+python -m rng_operator.main --dry-run --software-estop
 
-3.  **Run the Operator:**
-    ```bash
-    # Interactive mode (prompts for goal)
-    sudo python -m rng_operator.main
+# For real hardware
+sudo python -m rng_operator.main
+```
 
-    # Dry-run (safe for dev machines without hardware gadgets)
-    python -m rng_operator.main --dry-run --software-estop
-    ```
-
-4.  **Run the Frontend:**
-    ```bash
-    npm install
-    npm run dev
-    ```
-
-## 🧠 Key Features
-
-*   **Generative Ducky Script:** The agent writes its own automation scripts on the fly based on what it sees.
-*   **Visual Servoing:** Closed-loop mouse control ensures clicks land exactly where intended, correcting for resolution mismatches.
-*   **Safety First:** A rigorous `PolicyGuardian` blocks dangerous commands (`rm -rf`) and enforces "Safe Zones" on the screen.
-*   **Android Integration:** Use your phone as the "Eye" (Camera) and "Hand" (USB Gadget).
-
-## 🤝 Contributing
-
-See [Review Snapshot](docs/REVIEW_SNAPSHOT.md) for recent architectural decisions. We welcome PRs!
+### 4. Open the Frontend
+```bash
+npm run dev
+# Visit http://localhost:5173
+```
 
 ---
 
+## 📚 Documentation
+Detailed documentation is available in the **[Documentation Hub](docs/INDEX.md)**.
+
+- **[Architecture Deep Dive](docs/ARCHITECTURE.md)**
+- **[Hardware Setup Guide](docs/android/SETUP_GUIDE.md)**
+- **[Phased Development Track](docs/PHASED_DEVELOPMENT_TRACK.md)**
+
+---
+
+## 🤝 Contributing
+We welcome contributions from humans and AI agents. Please see our **[Contributing Guidelines](CONTRIBUTING.md)** and our **[Security Policy](SECURITY.md)**.
+
+---
 *Built with ❤️ for the Air-Gapped Future.*
