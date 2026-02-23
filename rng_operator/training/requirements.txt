@@ -5,4 +5,5 @@ onnxruntime>=1.15.0
 tqdm
 pillow
 numpy
-opencv-python-headlessonnxscript>=0.1.0
+opencv-python-headless
+onnxscript>=0.1.0

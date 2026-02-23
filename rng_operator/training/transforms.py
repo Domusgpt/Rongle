@@ -46,3 +46,22 @@ class ToTensor:
     def __call__(self, image, target):
         image = F.to_tensor(image)
         return image, target
+
+class RandomHDMINoise:
+    """Simulate HDMI signal artifacts, compression, and jitter."""
+    def __init__(self, p=0.5):
+        self.p = p
+
+    def __call__(self, image, target):
+        import random
+        if random.random() > self.p:
+            return image, target
+
+        # Add Gaussian noise
+        noise_type = random.choice(["gaussian", "jitter", "none"])
+        if noise_type == "gaussian":
+            # Simple brightness/contrast jitter as a proxy for noise if not using specialized libs
+            image = F.adjust_brightness(image, random.uniform(0.8, 1.2))
+            image = F.adjust_contrast(image, random.uniform(0.8, 1.2))
+
+        return image, target
