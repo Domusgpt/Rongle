@@ -6,7 +6,7 @@ export class WebRTCStreamer {
     this.backendUrl = backendUrl.replace(/\/$/, ''); // Remove trailing slash
   }
 
-  async start(stream: MediaStream): Promise<void> {
+  async start(stream: MediaStream, apiKey?: string): Promise<void> {
     if (this.pc) {
       this.stop();
     }
@@ -45,9 +45,14 @@ export class WebRTCStreamer {
 
       await this.waitForIceGathering();
 
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (apiKey) {
+        headers['X-Device-Key'] = apiKey;
+      }
+
       const response = await fetch(`${this.backendUrl}/offer`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           sdp: this.pc.localDescription?.sdp,
           type: this.pc.localDescription?.type,

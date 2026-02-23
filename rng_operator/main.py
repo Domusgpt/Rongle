@@ -354,7 +354,10 @@ async def main_async() -> None:
             sys.exit(1)
         logger.info("Initializing WebRTC Receiver...")
         webrtc_receiver = WebRTCReceiver()
-        webrtc_server = WebRTCServer(webrtc_receiver, port=8080) # Using 8080 or configurable?
+        device_api_key = os.environ.get("DEVICE_API_KEY", "")
+        if not device_api_key:
+            logger.warning("DEVICE_API_KEY not set. WebRTC signaling will be UNAUTHENTICATED.")
+        webrtc_server = WebRTCServer(webrtc_receiver, port=8080, api_key=device_api_key)
 
     grabber = FrameGrabber(
         video_source=video_source,
