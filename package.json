@@ -13,9 +13,8 @@
     "android:build": "npm run build && npx cap sync android && cd android && ./gradlew assembleDebug",
     "android:apk": "npm run android:build && echo 'APK at: android/app/build/outputs/apk/debug/app-debug.apk'",
     "android:run": "npx cap run android",
-    "test": "vitest",
-    "test:e2e": "playwright test",
-    "test:backend": "pytest rongle_operator/tests/ -v"
+    "test:backend": "pytest tests/ -v",
+    "test": "vitest"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.2",
@@ -30,7 +29,7 @@
     "react-dom": "^19.2.4"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
+    "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^22.14.0",

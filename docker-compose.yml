@@ -38,30 +38,35 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./portal:/app/portal:ro
+      - postgres
+      - redis
 
   operator:
     build:
       context: .
-      dockerfile: rongle_operator/Dockerfile
-    environment:
-      - RONGLE_DRY_RUN=true
-      # If operator needs to talk to portal or redis
-      - REDIS_URL=redis://redis:6379/0
-      # Mount USB devices if needed (commented out for safety/portability)
-      # devices:
-      #   - /dev/hidg0:/dev/hidg0
-    depends_on:
-      redis:
-        condition: service_healthy
+      dockerfile: rng_operator/Dockerfile
+    # Privileged mode required for direct hardware access (/dev/video0, /dev/hidg*)
+    privileged: true
     volumes:
-      - ./rongle_operator:/app/rongle_operator:ro
+      - /dev/video0:/dev/video0
+      # - /dev/hidg0:/dev/hidg0 # Uncomment on actual hardware
+      # - /dev/hidg1:/dev/hidg1
+    environment:
+      - VITE_PORTAL_URL=http://portal:8000
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    command: ["python", "-m", "rng_operator.main", "--dry-run", "--software-estop"] # Default safe mode
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=rongle
+      - POSTGRES_PASSWORD=rongle
+      - POSTGRES_DB=rongle
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
 
 volumes:
   postgres_data:
-  redis_data:
