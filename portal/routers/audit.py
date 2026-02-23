@@ -84,8 +84,7 @@ async def verify_audit_chain(
                 "detail": f"previous_hash mismatch at seq {entry.sequence}",
             }
         # Recompute hash
-        screenshot_hash = entry.screenshot_hash or ("0" * 64)
-        preimage = f"{entry.timestamp:.6f}|{entry.action}|{screenshot_hash}|{entry.previous_hash}"
+        preimage = f"{entry.timestamp:.6f}|{entry.action}|{entry.screenshot_hash}|{entry.previous_hash}"
         expected = hashlib.sha256(preimage.encode()).hexdigest()
         if entry.entry_hash != expected:
             return {

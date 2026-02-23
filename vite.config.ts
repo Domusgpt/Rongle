@@ -1,8 +1,7 @@
+/// <reference types="vitest" />
 import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-
-/// <reference types="vitest" />
 
 // SECURITY: API keys are NOT baked into the frontend bundle.
 // In direct mode, the user enters their key at runtime (stored in sessionStorage).
@@ -26,8 +25,10 @@ export default defineConfig({
     },
   },
   test: {
-    environment: 'jsdom',
     globals: true,
-    setupFiles: './tests/setup.ts',
+    environment: 'jsdom',
+    setupFiles: './setupTests.ts',
+    css: true,
+    exclude: ['**/tests/e2e/**', '**/node_modules/**'], // Exclude Playwright tests from Vitest
   },
 });

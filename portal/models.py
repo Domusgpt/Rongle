@@ -116,9 +116,6 @@ class UsageRecord(Base):
     latency_ms: Mapped[float] = mapped_column(Float, default=0.0)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, index=True)
 
-    # Relationships
-    user: Mapped[User] = relationship(back_populates="usage_records")
-
 
 # ---------------------------------------------------------------------------
 # AuditEntry (synced from device Merkle chain)

@@ -1,37 +1,113 @@
-# Improvement Proposals (RFCs)
+# Engineering Improvement Proposals
 
-Based on the [Engineering Critique](ENGINEERING_CRITIQUE.md), the following proposals outline the path forward.
+This document proposes technical solutions for the issues identified in `ENGINEERING_CRITIQUE.md`.
 
-## RFC-001: Async Agent Core
-**Problem:** Blocking VLM calls freeze the agent loop.
-**Proposal:**
-1.  Rewrite `main.py` using `asyncio`.
-2.  Run perception (`FrameGrabber`) and reasoning (`VLMReasoner`) in separate tasks.
-3.  Use a `Queue` for actions. The `Actuator` task consumes commands from the queue, allowing the `Planner` to think ahead.
+## 1. Reliability: Persistent Session Manager
 
-## RFC-002: Session Persistence
-**Problem:** If the python process crashes, the agent forgets its goal and history.
-**Proposal:**
-1.  Introduce a `SessionManager` (SQLite or JSON).
-2.  Store `current_goal`, `action_history`, and `step_index`.
-3.  On startup, check for an active session and resume.
+**Target:** `rongle_operator/session_manager.py`
 
-## RFC-003: Native Android Eye
-**Problem:** Dependency on 3rd-party IP Webcam app.
-**Proposal:**
-1.  Build a custom Android Camera service within the Capacitor App.
-2.  Stream video via WebRTC (peer-to-peer) directly to the backend, reducing latency and removing the HTTP stream overhead.
+Implement a `SessionManager` class to persist agent state.
 
-## RFC-004: Robust Calibration
-**Problem:** Simple 2-point calibration fails on complex displays.
-**Proposal:**
-1.  Implement "9-point Calibration" (corners + edges + center).
-2.  Compute a Homography matrix (perspective transform) instead of simple X/Y scaling.
-3.  This allows accurate clicking even if the camera is viewing the screen at an angle.
+```python
+import sqlite3
+from dataclasses import dataclass
 
-## RFC-005: Encrypted Audit Logs
-**Problem:** Logs are plaintext.
-**Proposal:**
-1.  Generate a session keypair on startup (or burn a public key into the firmware).
-2.  Encrypt each log entry payload with the public key (Hybrid encryption: AES for data, RSA for session key).
-3.  Only the holder of the private key (the admin) can read the logs.
+@dataclass
+class AgentSession:
+    goal: str
+    step_index: int
+    context_history: list[str]
+    last_active: float
+
+class SessionManager:
+    def __init__(self, db_path="state.db"):
+        self.conn = sqlite3.connect(db_path)
+        self._init_table()
+
+    def _init_table(self):
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS session (
+                key TEXT PRIMARY KEY,
+                goal TEXT,
+                step_index INTEGER,
+                context_history TEXT,
+                last_active REAL
+            )
+        """)
+
+    def save_session(self, session: AgentSession):
+        # ... logic to upsert session ...
+        pass
+
+    def load_session(self) -> AgentSession | None:
+        # ... logic to load ...
+        pass
+```
+
+**Integration:** Update `main.py` to check `SessionManager.load_session()` on startup.
+
+## 2. Scalability: Batch Telemetry Upload
+
+**Target:** `rongle_operator/portal_client.py`
+
+Modify `sync_audit` to use a buffer.
+
+```python
+class PortalClient:
+    def __init__(self, ...):
+        self._audit_buffer = []
+        self._flush_threshold = 10
+
+    async def log_audit(self, entry: dict):
+        self._audit_buffer.append(entry)
+        if len(self._audit_buffer) >= self._flush_threshold:
+            await self.flush_audit()
+
+    async def flush_audit(self):
+        if not self._audit_buffer: return
+        try:
+            await self._post("/api/audit/sync", {"entries": self._audit_buffer})
+            self._audit_buffer = []
+        except Exception:
+            # logic to keep buffer and retry later
+            pass
+```
+
+## 3. Security: Environment Validation
+
+**Target:** `rongle_operator/main.py` (Pre-flight check)
+
+```python
+def check_environment(settings: Settings):
+    required_paths = [
+        settings.video_device,
+        settings.hid_keyboard_dev,
+        Path(settings.audit_log_path).parent
+    ]
+    for p in required_paths:
+        if not Path(p).exists():
+            raise RuntimeError(f"Critical path missing: {p}")
+```
+
+## 4. Vision: ONNX Runtime Integration
+
+**Target:** `rongle_operator/visual_cortex/fast_detector.py`
+
+Replace stub with `onnxruntime`.
+
+```python
+import onnxruntime as ort
+
+class FastDetector:
+    def __init__(self, model_path: str):
+        self.session = ort.InferenceSession(model_path)
+
+    def detect(self, frame: np.ndarray):
+        # Preprocess: resize to 300x300, normalize
+        # Run inference
+        # Postprocess: NMS
+        pass
+```
+
+---
+[Back to Documentation Index](INDEX.md)
