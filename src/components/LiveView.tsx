@@ -15,11 +15,13 @@ interface LiveViewProps {
   onCameraActive?: (active: boolean) => void;
   streamToBackend?: boolean;
   backendUrl?: string;
+  apiKey?: string;
 }
 
 export const LiveView: React.FC<LiveViewProps> = ({
   status, analysis, onCaptureFrame, onAnnotatedFrame, isProcessing,
-  annotationsEnabled, onCameraActive, streamToBackend = false, backendUrl = 'http://localhost:8080'
+  annotationsEnabled, onCameraActive, streamToBackend = false,
+  backendUrl = 'http://localhost:8080', apiKey
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -77,7 +79,7 @@ export const LiveView: React.FC<LiveViewProps> = ({
         }
         try {
           const stream = videoRef.current.srcObject as MediaStream;
-          await streamerRef.current.start(stream);
+          await streamerRef.current.start(stream, apiKey);
           setIsStreaming(true);
         } catch (err) {
           console.error("Streaming failed:", err);
