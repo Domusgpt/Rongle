@@ -1,6 +1,7 @@
 import cv2
 import time
 import os
+import struct
 from .base import VideoSource, HIDActuator, Frame
 import numpy as np
 
@@ -40,19 +41,16 @@ class PiHIDActuator(HIDActuator):
         self.mouse_fd = os.open(self.mouse_dev, os.O_WRONLY)
 
     def send_key(self, scancode: int, modifier: int = 0):
-        import struct
         report = struct.pack("BB6B", modifier, 0, scancode, 0, 0, 0, 0, 0)
         os.write(self.kbd_fd, report)
         time.sleep(0.01)
         os.write(self.kbd_fd, b"\x00"*8)
 
     def send_mouse_move(self, dx: int, dy: int):
-        import struct
         report = struct.pack("Bbbb", 0, dx, dy, 0)
         os.write(self.mouse_fd, report)
 
     def send_mouse_click(self, button: int = 1):
-        import struct
         press = struct.pack("Bbbb", button, 0, 0, 0)
         release = struct.pack("Bbbb", 0, 0, 0, 0)
         os.write(self.mouse_fd, press)
