@@ -138,7 +138,7 @@ class LLMService:
                 data=image_bytes,
             )))
 
-        response = self._client.models.generate_content(
+        response = await self._client.aio.models.generate_content(
             model=model,
             contents=[types.Content(parts=parts)],
         )
