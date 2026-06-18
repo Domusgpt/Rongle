@@ -9,6 +9,7 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+import secrets
 from aiohttp import web
 
 from .visual_cortex.webrtc_receiver import WebRTCReceiver
@@ -17,10 +18,11 @@ logger = logging.getLogger(__name__)
 
 
 class WebRTCServer:
-    def __init__(self, receiver: WebRTCReceiver, host: str = "0.0.0.0", port: int = 8080):
+    def __init__(self, receiver: WebRTCReceiver, host: str = "0.0.0.0", port: int = 8080, api_key: str | None = None):
         self.receiver = receiver
         self.host = host
         self.port = port
+        self.api_key = api_key
         self.app = web.Application()
         self.runner: web.AppRunner | None = None
 
@@ -28,6 +30,17 @@ class WebRTCServer:
         self.app.router.add_options("/offer", self.options)
 
     async def offer(self, request: web.Request):
+        # Authentication check
+        if self.api_key:
+            auth_header = request.headers.get("X-Device-Key")
+            if not auth_header or not secrets.compare_digest(auth_header, self.api_key):
+                logger.warning("Unauthorized WebRTC offer attempt from %s", request.remote)
+                return web.json_response(
+                    {"error": "Unauthorized"},
+                    status=401,
+                    headers={"Access-Control-Allow-Origin": "*"}
+                )
+
         params = await request.json()
         logger.info("Received SDP offer")
 
@@ -44,7 +57,7 @@ class WebRTCServer:
             headers={
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "POST, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type",
+                "Access-Control-Allow-Headers": "Content-Type, X-Device-Key",
             },
         )
 

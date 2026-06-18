@@ -499,6 +499,7 @@ export default function App() {
                   isProcessing={status === AgentStatus.PERCEIVING}
                   annotationsEnabled={config.annotationsEnabled}
                   streamToBackend={config.streamToBackend}
+                  apiKey={selectedDevice?.api_key}
                   onCameraActive={(active) => setHardware(prev => ({ ...prev, cameraActive: active }))}
                 />
                 {showCnnOverlay && cnnEnabled && (
